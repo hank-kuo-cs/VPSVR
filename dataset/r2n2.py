@@ -6,7 +6,14 @@ from tqdm import tqdm
 from kaolin.rep import TriangleMesh
 from PIL import Image
 from torch.utils.data import Dataset
-from .base import CLASSES, transform_image
+from .base import transform_image
+
+
+train_classes = ['02691156', '02958343', '03001627']
+test_classes = ['02828884', '03211117', '03636649', '03691459', '02933112'
+                '04090263', '04256520', '04379243', '04401088', '04530566']
+
+CLASSES = {'train': train_classes, 'test': test_classes}
 
 
 class R2N2Dataset(Dataset):

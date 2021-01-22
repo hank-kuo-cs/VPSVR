@@ -19,7 +19,6 @@ def save_mesh_result(rgb: torch.Tensor, input_depth: torch.Tensor,
     assert input_depth.ndimension() == 3  # (1, H, W)
 
     rgb = denormlize_image(rgb)
-    # input_depth = DepthRenderer.normalize_depth(input_depth)
 
     vp_colors = get_vp_colors(vp_num)
     gif_imgs = []

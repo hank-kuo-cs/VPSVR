@@ -42,11 +42,12 @@ class DepthRenderer:
 
     @classmethod
     def render_depths_of_multi_meshes(cls, multi_vertices: list, multi_faces: list,
-                                      dist=1.0, elev=0.0, azim=90.0,
+                                      dist=1.0, elev=0.0, azim=0.0,
                                       img_size=256, normalize=True, device='cuda'):
         assert len(multi_vertices) == len(multi_faces)
 
         meshes = Meshes(verts=multi_vertices, faces=multi_faces)
+        azim = 90 - azim  # Pytorch3D axis is different from ShapeNet and Kaolin
 
         # camera setting
         R, T = look_at_view_transform(dist=dist, elev=elev, azim=azim, device=device)
@@ -66,9 +67,10 @@ class DepthRenderer:
 
     @classmethod
     def render_depth_of_single_mesh(cls, vertices: torch.Tensor, faces: torch.Tensor,
-                                    dist=1.0, elev=0.0, azim=90.0,
+                                    dist=1.0, elev=0.0, azim=0.0,
                                     img_size=256, normalize=True, device='cuda'):
         meshes = Meshes(verts=[vertices], faces=[faces])
+        azim = 90 - azim  # Pytorch3D axis is different from ShapeNet and Kaolin
 
         # camera setting
         R, T = look_at_view_transform(dist=dist, elev=elev, azim=azim, device=device)

@@ -1,6 +1,5 @@
 import torch
 from .image import concat_images, denormlize_image
-from ..render import DepthRenderer
 
 
 def save_depth_result(rgb: torch.Tensor, predict_depth: torch.Tensor, gt_depth: torch.Tensor, save_path: str):
@@ -9,8 +8,6 @@ def save_depth_result(rgb: torch.Tensor, predict_depth: torch.Tensor, gt_depth: 
     assert gt_depth.ndimension() == 3  # (1, H, W)
 
     rgb = denormlize_image(rgb)
-    # predict_depth = DepthRenderer.normalize_depth(predict_depth)
-    # gt_depth = DepthRenderer.normalize_depth(gt_depth)
 
     concated_img = concat_images([rgb, predict_depth, gt_depth])
     concated_img.save(save_path)

@@ -21,8 +21,9 @@ def parse_arguments():
     parser.add_argument('--use_gt_depth', action='store_true')
 
     # Dataset Setting
-    parser.add_argument('--dataset', type=str, default='3dr2n2', help='choose "genre" or "3dr2n2"')
-    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/ShapeNetRendering', help='the root directory of dataset')
+    parser.add_argument('--unseen', action='store_true', default=True, help='eval on unseen or seen classes')
+    parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2"')
+    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='the root directory of dataset')
     parser.add_argument('--size', type=int, default=0, help='0 indicates all of the dataset, '
                                                             'or it will divide equally on all classes')
     # Network
