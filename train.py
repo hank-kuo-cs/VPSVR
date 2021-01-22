@@ -131,6 +131,7 @@ def train(args):
             gt_depths = DepthRenderer.render_depths_of_multi_meshes(vertices, faces, normalize=True)
 
             # Network prediction
+            # rgbs = rgbs * masks
             predict_depths = den(rgbs)
             input_depths = predict_depths if torch.rand((1,)).item() > args.depth_tf_ratio else gt_depths
 

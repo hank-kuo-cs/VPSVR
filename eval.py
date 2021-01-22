@@ -117,6 +117,8 @@ def eval(args):
         dists, elevs, azims = data['dist'].cuda(), data['elev'].cuda(), data['azim'].cuda()
 
         gt_depths = DepthRenderer.render_depths_of_multi_meshes(vertices, faces, normalize=True)
+
+        rgbs = rgbs * masks
         predict_depths = den(rgbs)
 
         input_depths = gt_depths if args.use_gt_depth else predict_depths
