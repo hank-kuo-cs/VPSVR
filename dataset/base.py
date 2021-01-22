@@ -24,8 +24,8 @@ def collate_func(batch_data):
             else:
                 collate_data[key].append(batch_data[i][key])
 
-        for key in ['rgb', 'mask', 'dist', 'elev', 'azim']:
-            collate_data[key] = torch.cat(collate_data[key])
+    for key in ['rgb', 'mask', 'dist', 'elev', 'azim']:
+        collate_data[key] = torch.cat(collate_data[key])
 
     return collate_data
 
