@@ -19,13 +19,12 @@ def save_mesh_result(rgb: torch.Tensor, input_depth: torch.Tensor,
     assert input_depth.ndimension() == 3  # (1, H, W)
 
     rgb = denormlize_image(rgb)
-    # input_depth = DepthRenderer.normalize_depth(input_depth)
 
     vp_colors = get_vp_colors(vp_num)
     gif_imgs = []
 
     for azim in range(0, 360, 30):
-        vp_img = VertexRenderer.render(predict_mesh, 1.5, 0.0, azim, colors=vp_colors)[0][0].permute(2, 0, 1)
+        vp_img = VertexRenderer.render(predict_mesh, 1.0, 0.0, azim, colors=vp_colors)[0][0].permute(2, 0, 1)
         predict_depth = DepthRenderer.render_depth_of_single_mesh(predict_mesh.vertices, predict_mesh.faces, azim=azim)
         gt_depth = DepthRenderer.render_depth_of_single_mesh(gt_mesh.vertices, gt_mesh.faces, azim=azim)
 

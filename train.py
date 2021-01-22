@@ -110,15 +110,14 @@ def train(args):
 
     l1_loss_func, mse_loss_func, cd_loss_func = L1Loss(), MSELoss(), ChamferDistanceLoss()
 
-    epoch_train_losses = {'cd': [], 'vp_div': [], 'depth': [], 'mul_depth': []}
-    # epoch_eval_losses = {'cd': [], 'depth': []}
+    epoch_train_losses = {'cd': [], 'vp_div': [], 'depth': []}
 
     for epoch in range(args.epochs):
         den.train()
         vpn.train()
 
         n = 0
-        avg_losses = {'cd': 0.0, 'vp_div': 0.0, 'depth': 0.0, 'mul_depth': 0.0}
+        avg_losses = {'cd': 0.0, 'vp_div': 0.0, 'depth': 0.0}
 
         progress_bar = tqdm(dataloader)
 
@@ -132,6 +131,7 @@ def train(args):
             gt_depths = DepthRenderer.render_depths_of_multi_meshes(vertices, faces, normalize=True)
 
             # Network prediction
+            # rgbs = rgbs * masks
             predict_depths = den(rgbs)
             input_depths = predict_depths if torch.rand((1,)).item() > args.depth_tf_ratio else gt_depths
 
@@ -154,19 +154,14 @@ def train(args):
 
             cd_loss = cd_loss_func(predict_points, gt_points) * args.l_cd
 
-            # Multi-rendered depth loss
-            predict_meshes = Meshing.vp_meshing(volumes, rotates, translates,
-                                                cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
-
             total_loss = vp_div_loss + cd_loss
 
             optimizer.zero_grad()
             total_loss.backward()
             optimizer.step()
 
-            progress_bar.set_description(
-                'CD loss = %.6f, depth loss = %.6f, VP diverse loss = %.6f'
-                % (cd_loss.item(), depth_loss.item(), vp_div_loss.item()))
+            progress_bar.set_description('CD loss = %.6f, depth loss = %.6f, VP diverse loss = %.6f'
+                                         % (cd_loss.item(), depth_loss.item(), vp_div_loss.item()))
 
             avg_losses['depth'] += depth_loss.item()
             avg_losses['cd'] += cd_loss.item()
@@ -174,6 +169,8 @@ def train(args):
             n += 1
 
             if n % args.record_batch_interval == 0:
+                predict_meshes = Meshing.vp_meshing(volumes, rotates, translates,
+                                                    cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
                 depth_save_path = os.path.join(record_paths['depth'], 'epoch%d-batch%d.png' % (epoch + 1, n))
                 save_depth_result(rgbs[0], predict_depths[0], gt_depths[0], depth_save_path)
 
