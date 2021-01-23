@@ -16,8 +16,8 @@ def parse_arguments():
 
     # Evaluate Setting
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
-    parser.add_argument('--den_path', type=str, default='checkpoint/den/den_epoch50.pth')
-    parser.add_argument('--vpn_path', type=str, default='checkpoint/vpn/vpn_epoch50.pth')
+    parser.add_argument('--den_path', type=str, default='checkpoint/den/den_epoch050.pth')
+    parser.add_argument('--vpn_path', type=str, default='checkpoint/vpn/vpn_epoch050.pth')
     parser.add_argument('--use_gt_depth', action='store_true')
 
     # Dataset Setting
@@ -63,11 +63,8 @@ from utils.visualize import save_mesh_result, save_depth_result
 
 
 def load_model(args):
-    if args.use_gt_depth:
-        den = None
-    else:
-        den = DepthEstimationNet().cuda()
-        den.load_state_dict(torch.load(args.den_path))
+    den = DepthEstimationNet().cuda()
+    den.load_state_dict(torch.load(args.den_path))
 
     vpn = VolumetricPrimitiveNet(vp_num=args.sphere_num + args.cuboid_num).cuda()
     vpn.load_state_dict(torch.load(args.vpn_path))
@@ -91,10 +88,7 @@ def eval(args):
     print('Load %s testing dataset, size =' % args.dataset, len(dataset))
 
     den, vpn = load_model(args)
-    if args.use_gt_depth:
-        print('Use ground truth depth to input vpn')
-    else:
-        den.eval()
+    den.eval()
     vpn.eval()
 
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size,
@@ -152,7 +146,7 @@ def eval(args):
 
         if (idx + 1) % args.record_batch_interval == 0:
             depth_save_path = os.path.join(record_paths['depth'], 'batch%d.png' % (idx + 1))
-            vp_save_path = os.path.join(record_paths['cd'], 'batch%d.png' % (idx + 1))
+            vp_save_path = os.path.join(record_paths['vp'], 'batch%d.png' % (idx + 1))
 
             save_depth_result(rgbs[0], predict_depths[0], gt_depths[0], depth_save_path)
             save_mesh_result(rgbs[0], input_depths[0],
