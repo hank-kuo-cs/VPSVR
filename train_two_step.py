@@ -37,7 +37,7 @@ def parse_arguments():
 
     # Loss weight
     parser.add_argument('--l_depth', type=float, default=1.0, help='lambda of depth estimation loss')
-    parser.add_argument('--l_vpdiv', type=float, default=0.1, help='lambda of vp diverse loss')
+    parser.add_argument('--l_vpdiv', type=float, default=0.5, help='lambda of vp diverse loss')
     parser.add_argument('--l_cd', type=float, default=1.0, help='lambda of cd loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
@@ -99,11 +99,18 @@ def load_model(args):
 
 
 def set_path():
-    checkpoint_paths = {'den': './checkpoint/den/', 'vpn': './checkpoint/vpn/'}
+    checkpoint_paths = {'den': './checkpoint/den/',
+                        'depth_en': './checkpoint/depth_en/',
+                        'translate_de': './checkpoint/translate_de/',
+                        'volume_rotate_de': './checkpoint/volume_rotate_de/'}
+
     for checkpoint_path in list(checkpoint_paths.values()):
         os.makedirs(checkpoint_path, exist_ok=True)
 
-    record_paths = {'loss': './output/loss/train/', 'depth': './output/depth/train/', 'vp': './output/vp/train/'}
+    record_paths = {'loss': './output/loss/train/',
+                    'depth': './output/depth/train/',
+                    'vp': './output/vp/train/'}
+
     for record_path in list(record_paths.values()):
         os.makedirs(record_path, exist_ok=True)
 
@@ -227,8 +234,17 @@ def train(args):
 
         # Record some result
         if (epoch+1) % args.checkpoint_epoch_interval == 0:
-            torch.save(den.state_dict(), os.path.join(checkpoint_paths['den'], 'den_epoch%03d.pth' % (epoch + 1)))
-            torch.save(vpn.state_dict(), os.path.join(checkpoint_paths['vpn'], 'vpn_epoch%03d.pth' % (epoch + 1)))
+            den_path = os.path.join(checkpoint_paths['den'], 'den_epoch%03d.pth' % (epoch + 1))
+            torch.save(den.state_dict(), den_path)
+
+            depth_en_path = os.path.join(checkpoint_paths['depth_en'], 'depth_en_epoch%03d.pth' % (epoch + 1))
+            torch.save(depth_en.state_dict(), depth_en_path)
+
+            translate_de_path = os.path.join(checkpoint_paths['translate_de'], 'translate_de_epoch%03d.pth' % (epoch + 1))
+            torch.save(translate_de.state_dict(), translate_de_path)
+
+            volume_rotate_de_path = os.path.join(checkpoint_paths['volume_rotate_de'], 'volume_rotate_de_epoch%03d.pth' % (epoch + 1))
+            torch.save(volume_rotate_de.state_dict(), volume_rotate_de_path)
 
     for key in list(epoch_train_losses.keys()):
         np.save(os.path.join(record_paths['loss'], key + '.npy'), np.array(epoch_train_losses[key]))

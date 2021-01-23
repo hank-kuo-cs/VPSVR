@@ -125,7 +125,9 @@ def eval(args):
         predict_points = Sampling.sample_vp_points(volumes, rotates, translates,
                                                    cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
 
-        cd_loss = cd_loss_func(predict_points, gt_points, each_batch=True)
+        cd_loss = cd_loss_func(predict_points * 1.5 / 2.2,
+                               gt_points * 1.5 / 2.2,
+                               each_batch=True)  # normalize with GenRe
 
         predict_meshes = Meshing.vp_meshing(volumes, rotates, translates,
                                             cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
