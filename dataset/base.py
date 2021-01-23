@@ -20,7 +20,7 @@ def collate_func(batch_data):
             if key in ['rgb', 'mask']:
                 collate_data[key].append(batch_data[i][key][None])
             elif key in ['dist', 'elev', 'azim']:
-                collate_data[key].append(torch.tensor(batch_data[i][key], dtype=torch.float)[None])
+                collate_data[key].append(torch.tensor(batch_data[i][key], dtype=torch.float).view(1, 1))
             else:
                 collate_data[key].append(batch_data[i][key])
 
