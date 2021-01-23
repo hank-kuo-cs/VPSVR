@@ -112,12 +112,12 @@ def set_path():
 
 def get_vp_features(vp_centers: torch.Tensor, imgs: torch.Tensor, perceptual_features_list: list,
                     dist: torch.Tensor, elev: torch.Tensor, azim: torch.Tensor, use_symmetry: bool):
-    vp_local_features = get_local_features(vp_centers, imgs, perceptual_features_list)[0]
+    vp_local_features = get_local_features(vp_centers, imgs, perceptual_features_list)
     if not use_symmetry:
         return vp_local_features
 
     symmetric_points = get_symmetrical_points(vp_centers, dist, elev, azim)
-    sym_local_features = get_local_features(symmetric_points, imgs, perceptual_features_list)[0]
+    sym_local_features = get_local_features(symmetric_points, imgs, perceptual_features_list)
 
     return torch.cat([vp_local_features, sym_local_features], -1)
 
@@ -183,8 +183,8 @@ def train(args):
             vp_features = get_vp_features(vp_center_points, input_depths, perceptual_feature_list,  # (B, K, F)
                                           dists, elevs, azims, use_symmetry=args.use_symmetry)
             for i in range(vp_num):
-                vp_feature = vp_features[:, i, :]  # (B, F)
-                volume, rotate = volume_rotate_de(global_features, vp_feature)
+                one_vp_feature = vp_features[:, i, :]  # (B, F)
+                volume, rotate = volume_rotate_de(global_features, one_vp_feature)
                 volumes.append(volume)
                 rotates.append(rotate)
 
