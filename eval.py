@@ -31,6 +31,7 @@ def parse_arguments():
     parser.add_argument('--cuboid_num', type=int, default=8, help='number of cuboids')
 
     # Record Setting
+    parser.add_argument('--output_path', type=str, default='./output/eval/epoch50')
     parser.add_argument('--record_batch_interval', type=int, default=20, help='record prediction result every N batch')
 
     return parser.parse_args()
@@ -72,10 +73,10 @@ def load_model(args):
     return den, vpn
 
 
-def set_path():
-    record_paths = {'loss': './output/loss/eval',
-                    'depth': './output/depth/eval',
-                    'vp': './output/vp/eval'}
+def set_path(args):
+    record_paths = {'loss': os.path.join(args.output_path, 'loss'),
+                    'depth': os.path.join(args.output_path, 'depth'),
+                    'vp': os.path.join(args.output_path, 'vp')}
     for record_path in list(record_paths.values()):
         os.makedirs(record_path, exist_ok=True)
 
@@ -94,7 +95,7 @@ def eval(args):
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size,
                             num_workers=8, shuffle=False, collate_fn=collate_func)
 
-    record_paths = set_path()
+    record_paths = set_path(args)
 
     mse_loss_func = MSELoss()
     cd_loss_func = ChamferDistanceLoss()
@@ -120,17 +121,13 @@ def eval(args):
         volumes, rotates, translates, local_features, global_features = vpn(input_depths)
 
         gt_meshes = Meshing.meshing_vertices_faces(vertices, faces)
-        gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=2048)
-
-        predict_points = Sampling.sample_vp_points(volumes, rotates, translates,
-                                                   cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
-
-        cd_loss = cd_loss_func(predict_points * 1.5 / 2.2,
-                               gt_points * 1.5 / 2.2,
-                               each_batch=True)  # normalize with GenRe
+        gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=1024)
 
         predict_meshes = Meshing.vp_meshing(volumes, rotates, translates,
                                             cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
+        predict_points = Sampling.sample_mesh_points(predict_meshes, sample_num=1024)
+
+        cd_loss = cd_loss_func(predict_points, gt_points, each_batch=True)
 
         batch_size = rgbs.size(0)
         for b in range(batch_size):

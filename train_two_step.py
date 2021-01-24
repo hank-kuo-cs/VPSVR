@@ -50,6 +50,8 @@ def parse_arguments():
                                                                           '0: not use gt depth, 1: only use gt depth')
 
     # Record Setting
+    parser.add_argument('--output_path', type=str, default='./output/train')
+    parser.add_argument('--checkpoint_path', type=str, default='./checkpoint')
     parser.add_argument('--record_batch_interval', type=int, default=100, help='record prediction result every N batch')
     parser.add_argument('--checkpoint_epoch_interval', type=int, default=5, help='record model checkpoint every N epoch')
 
@@ -85,7 +87,7 @@ from utils.visualize import save_depth_result, save_mesh_result
 
 
 def load_model(args):
-    den = DepthEstimationNet().cuda()
+    depth_unet = DepthEstimationNet().cuda()
 
     depth_en = DepthEncoder().cuda()
 
@@ -95,24 +97,21 @@ def load_model(args):
     local_feature_dim = 960 * 2 if args.use_symmetry else 960
     volume_rotate_de = VolumeRotateDecoder(feature_dim=global_feature_dim + local_feature_dim).cuda()
 
-    return den, depth_en, translate_de, volume_rotate_de
+    return depth_unet, depth_en, translate_de, volume_rotate_de
 
 
-def set_path():
-    checkpoint_paths = {'den': './checkpoint/den/',
-                        'depth_en': './checkpoint/depth_en/',
-                        'translate_de': './checkpoint/translate_de/',
-                        'volume_rotate_de': './checkpoint/volume_rotate_de/'}
+def set_path(args):
+    network_names = ['depth_unet', 'depth_en', 'translate_de', 'volume_rotate_de']
+    checkpoint_paths = {}
+    for network_name in network_names:
+        checkpoint_paths[network_name] = os.path.join(args.checkpoint_path, network_name)
+        os.makedirs(checkpoint_paths[network_name], exist_ok=True)
 
-    for checkpoint_path in list(checkpoint_paths.values()):
-        os.makedirs(checkpoint_path, exist_ok=True)
-
-    record_paths = {'loss': './output/loss/train/',
-                    'depth': './output/depth/train/',
-                    'vp': './output/vp/train/'}
-
-    for record_path in list(record_paths.values()):
-        os.makedirs(record_path, exist_ok=True)
+    record_names = ['loss', 'depth', 'vp']
+    record_paths = {}
+    for record_name in record_names:
+        record_paths[record_name] = os.path.join(args.output_path, record_name)
+        os.makedirs(record_paths[record_name], exist_ok=True)
 
     return checkpoint_paths, record_paths
 
@@ -136,10 +135,10 @@ def train(args):
                             num_workers=8, shuffle=True, collate_fn=collate_func)
 
     vp_num = args.cuboid_num + args.sphere_num
-    checkpoint_paths, record_paths = set_path()
-    den, depth_en, translate_de, volume_rotate_de = load_model(args)
+    checkpoint_paths, record_paths = set_path(args)
+    depth_unet, depth_en, translate_de, volume_rotate_de = load_model(args)
     optimizer = Adam(params=[
-        {'params': den.parameters(), 'lr': args.lr_den},
+        {'params': depth_unet.parameters(), 'lr': args.lr_den},
         {'params': depth_en.parameters(), 'lr': args.lr_depth_en},
         {'params': translate_de.parameters(), 'lr': args.lr_translate_de},
         {'params': volume_rotate_de.parameters(), 'lr': args.lr_volume_rotate_de},
@@ -150,7 +149,7 @@ def train(args):
     epoch_train_losses = {'cd': [], 'vp_div': [], 'depth': []}
 
     for epoch in range(args.epochs):
-        den.train()
+        depth_unet.train()
         depth_en.train()
         translate_de.train()
         volume_rotate_de.train()
@@ -172,7 +171,7 @@ def train(args):
             gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=2048)
 
             # rgbs = rgbs * masks
-            predict_depths = den(rgbs)
+            predict_depths = depth_unet(rgbs)
 
             # Depth loss
             depth_loss = mse_loss_func(predict_depths, gt_depths) * args.l_depth
@@ -221,9 +220,7 @@ def train(args):
                 save_depth_result(rgbs[0], predict_depths[0], gt_depths[0], depth_save_path)
 
                 mesh_save_path = os.path.join(record_paths['vp'], 'epoch%d-batch%d.png' % (epoch + 1, n))
-                save_mesh_result(rgbs[0], input_depths[0],
-                                 predict_meshes[0], gt_meshes[0],
-                                 args.cuboid_num + args.sphere_num, mesh_save_path)
+                save_mesh_result(rgbs[0], input_depths[0], predict_meshes[0], gt_meshes[0], vp_num, mesh_save_path)
 
         for key in list(avg_losses.keys()):
             avg_losses[key] /= n
@@ -234,17 +231,14 @@ def train(args):
 
         # Record some result
         if (epoch+1) % args.checkpoint_epoch_interval == 0:
-            den_path = os.path.join(checkpoint_paths['den'], 'den_epoch%03d.pth' % (epoch + 1))
-            torch.save(den.state_dict(), den_path)
+            model_dict = {'depth_unet': depth_unet.state_dict(),
+                          'depth_en': depth_en.state_dict(),
+                          'translate_de': translate_de.state_dict(),
+                          'volume_rotate_de': volume_rotate_de.state_dict()}
 
-            depth_en_path = os.path.join(checkpoint_paths['depth_en'], 'depth_en_epoch%03d.pth' % (epoch + 1))
-            torch.save(depth_en.state_dict(), depth_en_path)
-
-            translate_de_path = os.path.join(checkpoint_paths['translate_de'], 'translate_de_epoch%03d.pth' % (epoch + 1))
-            torch.save(translate_de.state_dict(), translate_de_path)
-
-            volume_rotate_de_path = os.path.join(checkpoint_paths['volume_rotate_de'], 'volume_rotate_de_epoch%03d.pth' % (epoch + 1))
-            torch.save(volume_rotate_de.state_dict(), volume_rotate_de_path)
+            for network_name, model_weight in model_dict.items():
+                model_path = os.path.join(checkpoint_paths[network_name], '%s_epoch%03d.pth' % (network_name, epoch+1))
+                torch.save(model_weight, model_path)
 
     for key in list(epoch_train_losses.keys()):
         np.save(os.path.join(record_paths['loss'], key + '.npy'), np.array(epoch_train_losses[key]))
