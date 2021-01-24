@@ -34,7 +34,7 @@ def parse_arguments():
 
     # Loss weight
     parser.add_argument('--l_depth', type=float, default=1.0, help='lambda of depth estimation loss')
-    parser.add_argument('--l_vpdiv', type=float, default=0.1, help='lambda of vp diverse loss')
+    parser.add_argument('--l_vpdiv', type=float, default=0.5, help='lambda of vp diverse loss')
     parser.add_argument('--l_cd', type=float, default=1.0, help='lambda of cd loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
