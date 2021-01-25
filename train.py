@@ -155,7 +155,7 @@ def train(args):
 
             cd_loss = cd_loss_func(predict_points, gt_points) * args.l_cd
 
-            total_loss = vp_div_loss + cd_loss
+            total_loss = vp_div_loss + cd_loss + depth_loss
 
             optimizer.zero_grad()
             total_loss.backward()

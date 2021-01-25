@@ -162,6 +162,7 @@ def eval(args):
 
         rgbs = rgbs * masks
         predict_depths = depth_unet(rgbs)
+        predict_depths = predict_depths * masks
 
         input_depths = gt_depths if args.use_gt_depth else predict_depths
 
