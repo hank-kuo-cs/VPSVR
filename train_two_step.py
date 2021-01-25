@@ -213,7 +213,7 @@ def train(args):
             avg_losses['vp_div'] += vp_div_loss.item()
             n += 1
 
-            if n % args.record_batch_interval == 0:
+            if n % args.record_batch_interval == 0 and (epoch + 1) % 5 == 0:
                 predict_meshes = Meshing.vp_meshing(volumes, rotates, translates,
                                                     cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
                 depth_save_path = os.path.join(record_paths['depth'], 'epoch%d-batch%d.png' % (epoch + 1, n))

@@ -17,10 +17,12 @@ def parse_arguments():
 
     # Evaluation Setting
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
-    parser.add_argument('--depth_unet_path', type=str, default='checkpoint/depth_unet/depth_unet_epoch050.pth')
-    parser.add_argument('--depth_en_path', type=str, default='checkpoint/depth_en/depth_en_epoch050.pth')
-    parser.add_argument('--translate_de_path', type=str, default='checkpoint/translate_de/translate_de_epoch050.pth')
-    parser.add_argument('--volume_rotate_de_path', type=str, default='checkpoint/volume_rotate_de/volume_rotate_de_epoch050.pth')
+    parser.add_argument('--epoch', type=int, default=50, help='use which epoch to test,'
+                                                              'it will be ignore if below model paths given')
+    parser.add_argument('--depth_unet_path', type=str, default='')
+    parser.add_argument('--depth_en_path', type=str, default='')
+    parser.add_argument('--translate_de_path', type=str, default='')
+    parser.add_argument('--volume_rotate_de_path', type=str, default='')
     parser.add_argument('--use_symmetry', action='store_true', help='whether use symmetry features fusion')
     parser.add_argument('--use_gt_depth', action='store_true', help='whether use gt depth as network input')
 
@@ -40,7 +42,7 @@ def parse_arguments():
                                                                           '0: not use gt depth, 1: only use gt depth')
 
     # Record Setting
-    parser.add_argument('--output_path', type=str, default='./output/eval/epoch50')
+    parser.add_argument('--output_path', type=str, default='')
     parser.add_argument('--record_batch_interval', type=int, default=20, help='record prediction result every N batch')
 
     return parser.parse_args()
@@ -75,27 +77,37 @@ from utils.visualize import save_depth_result, save_mesh_result
 
 
 def load_model(args):
+    depth_unet_path = 'checkpoint/depth_unet/depth_unet_epoch%03d.pth' % args.epoch \
+        if not args.depth_unet_path else args.depth_unet_path
     depth_unet = DepthEstimationUNet().cuda()
-    depth_unet.load_state_dict(torch.load(args.depth_unet_path))
+    depth_unet.load_state_dict(torch.load(depth_unet_path))
 
+    depth_en_path = 'checkpoint/depth_en/depth_en_epoch%03d.pth' % args.epoch \
+        if not args.depth_en_path else args.depth_en_path
     depth_en = DepthEncoder().cuda()
-    depth_en.load_state_dict(torch.load(args.depth_en_path))
+    depth_en.load_state_dict(torch.load(depth_en_path))
 
+    translate_de_path = 'checkpoint/translate_de/translate_de_epoch%03d.pth' % args.epoch \
+        if not args.translate_de_path else args.translate_de_path
     translate_de = TranslateDecoder(vp_num=args.cuboid_num + args.sphere_num).cuda()
-    translate_de.load_state_dict(torch.load(args.translate_de_path))
+    translate_de.load_state_dict(torch.load(translate_de_path))
 
     global_feature_dim = 512
     local_feature_dim = 960 * 2 if args.use_symmetry else 960
+
+    volume_rotate_de_path = 'checkpoint/volume_rotate_de/volume_rotate_de_epoch%03d.pth' % args.epoch \
+        if not args.volume_rotate_de_path else args.volume_rotate_de_path
     volume_rotate_de = VolumeRotateDecoder(feature_dim=global_feature_dim + local_feature_dim).cuda()
-    volume_rotate_de.load_state_dict(torch.load(args.volume_rotate_de_path))
+    volume_rotate_de.load_state_dict(torch.load(volume_rotate_de_path))
 
     return depth_unet, depth_en, translate_de, volume_rotate_de
 
 
 def set_path(args):
-    record_paths = {'loss': os.path.join(args.output_path, 'loss'),
-                    'depth': os.path.join(args.output_path, 'depth'),
-                    'vp': os.path.join(args.output_path, 'vp')}
+    output_path = './output/eval/epoch%03d' % args.epoch if not args.output_path else args.output_path
+    record_paths = {'loss': os.path.join(output_path, 'loss'),
+                    'depth': os.path.join(output_path, 'depth'),
+                    'vp': os.path.join(output_path, 'vp')}
     for record_path in list(record_paths.values()):
         os.makedirs(record_path, exist_ok=True)
 
