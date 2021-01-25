@@ -114,6 +114,7 @@ def get_vp_features(vp_centers: torch.Tensor, imgs: torch.Tensor, perceptual_fea
     return torch.cat([vp_local_features, sym_local_features], -1)
 
 
+@torch.no_grad()
 def eval(args):
     dataset = GenReDataset(args, 'test') if args.dataset == 'genre' else R2N2Dataset(args, 'test')
     print('Load %s testing dataset, size =' % args.dataset, len(dataset))
