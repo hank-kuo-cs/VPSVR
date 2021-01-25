@@ -85,7 +85,7 @@ def train():
     checkpoint_paths, record_paths = set_path(args)
 
     cen = CameraEstimationNetwork().cuda()
-    optimizer = Adam(params=cen.parameters(), betas=(args.beta1, args.beta2))
+    optimizer = Adam(params=cen.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
     scmse_func = SphericalCoordinateMSE()
 
     for epoch in range(args.epochs):
