@@ -75,7 +75,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 
 from dataset import GenReDataset, R2N2Dataset, collate_func
-from model import DepthEstimationNet
+from model import DepthEstimationUNet
 from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder
 from utils.sampling import Sampling
 from utils.meshing import Meshing
@@ -87,7 +87,7 @@ from utils.visualize import save_depth_result, save_mesh_result
 
 
 def load_model(args):
-    depth_unet = DepthEstimationNet().cuda()
+    depth_unet = DepthEstimationUNet().cuda()
 
     depth_en = DepthEncoder().cuda()
 

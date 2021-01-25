@@ -8,7 +8,7 @@ import torch.nn as nn
 from torchvision.models import resnet18
 
 
-class DepthEstimationNet(nn.Module):
+class DepthEstimationUNet(nn.Module):
     def __init__(self, input_planes=3):
         super().__init__()
 

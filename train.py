@@ -70,7 +70,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 
 from dataset import GenReDataset, R2N2Dataset, collate_func
-from model import VolumetricPrimitiveNet, DepthEstimationNet
+from model import VolumetricPrimitiveNet, DepthEstimationUNet
 from utils.sampling import Sampling
 from utils.meshing import Meshing
 from utils.loss import ChamferDistanceLoss
@@ -79,7 +79,7 @@ from utils.visualize import save_depth_result, save_mesh_result
 
 
 def load_model(args):
-    den = DepthEstimationNet().cuda()
+    den = DepthEstimationUNet().cuda()
     vpn = VolumetricPrimitiveNet(vp_num=args.sphere_num + args.cuboid_num).cuda()
 
     return den, vpn
