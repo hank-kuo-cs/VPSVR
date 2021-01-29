@@ -37,10 +37,6 @@ def parse_arguments():
     parser.add_argument('--sphere_num', type=int, default=8, help='number of spheres')
     parser.add_argument('--cuboid_num', type=int, default=8, help='number of cuboids')
 
-    # Training trick
-    parser.add_argument('--depth_tf_ratio', type=float, default=0.0, help='teaching forcing ratio of input depth.'
-                                                                          '0: not use gt depth, 1: only use gt depth')
-
     # Record Setting
     parser.add_argument('--output_path', type=str, default='')
     parser.add_argument('--record_batch_interval', type=int, default=20, help='record prediction result every N batch')

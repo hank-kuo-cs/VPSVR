@@ -24,11 +24,11 @@ def parse_arguments():
     # Dataset Setting
     parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2"')
     parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='the root directory of dataset')
+    parser.add_argument('--depth_unet_path', type=str, default='checkpoint/depth_unet.pth')
     parser.add_argument('--size', type=int, default=0, help='0 indicates all of the dataset, '
                                                             'or it will divide equally on all classes')
 
     # Optimizer
-    parser.add_argument('--lr_den', type=float, default=1e-3, help='learning rate of depth estimation')
     parser.add_argument('--lr_depth_en', type=float, default=1e-5, help='learning rate of depth encoder')
     parser.add_argument('--lr_translate_de', type=float, default=1e-5, help='learning rate of translate decoder')
     parser.add_argument('--lr_volume_rotate_de', type=float, default=1e-5, help='learning rate of volume rotate decoder')
@@ -36,7 +36,6 @@ def parse_arguments():
     parser.add_argument('--beta2', type=float, default=0.9, help='beta2 of Adam optimizer')
 
     # Loss weight
-    parser.add_argument('--l_depth', type=float, default=1.0, help='lambda of depth estimation loss')
     parser.add_argument('--l_vpdiv', type=float, default=0.5, help='lambda of vp diverse loss')
     parser.add_argument('--l_cd', type=float, default=1.0, help='lambda of cd loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
@@ -88,6 +87,7 @@ from utils.visualize import save_depth_result, save_mesh_result
 
 def load_model(args):
     depth_unet = DepthEstimationUNet().cuda()
+    depth_unet.load_state_dict(torch.load(args.depth_unet_path))
 
     depth_en = DepthEncoder().cuda()
 
@@ -101,7 +101,7 @@ def load_model(args):
 
 
 def set_path(args):
-    network_names = ['depth_unet', 'depth_en', 'translate_de', 'volume_rotate_de']
+    network_names = ['depth_en', 'translate_de', 'volume_rotate_de']
     checkpoint_paths = {}
     for network_name in network_names:
         checkpoint_paths[network_name] = os.path.join(args.checkpoint_path, network_name)
@@ -138,7 +138,6 @@ def train(args):
     checkpoint_paths, record_paths = set_path(args)
     depth_unet, depth_en, translate_de, volume_rotate_de = load_model(args)
     optimizer = Adam(params=[
-        {'params': depth_unet.parameters(), 'lr': args.lr_den},
         {'params': depth_en.parameters(), 'lr': args.lr_depth_en},
         {'params': translate_de.parameters(), 'lr': args.lr_translate_de},
         {'params': volume_rotate_de.parameters(), 'lr': args.lr_volume_rotate_de},
@@ -146,16 +145,16 @@ def train(args):
 
     l1_loss_func, mse_loss_func, cd_loss_func = L1Loss(), MSELoss(), ChamferDistanceLoss()
 
-    epoch_train_losses = {'cd': [], 'vp_div': [], 'depth': []}
+    epoch_train_losses = {'cd': [], 'vp_div': []}
 
     for epoch in range(args.epochs):
-        depth_unet.train()
+        depth_unet.eval()
         depth_en.train()
         translate_de.train()
         volume_rotate_de.train()
 
         n = 0
-        avg_losses = {'cd': 0.0, 'vp_div': 0.0, 'depth': 0.0}
+        avg_losses = {'cd': 0.0, 'vp_div': 0.0}
 
         progress_bar = tqdm(dataloader)
 
@@ -171,10 +170,9 @@ def train(args):
             gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=2048)
 
             # rgbs = rgbs * masks
-            predict_depths = depth_unet(rgbs)
-
-            # Depth loss
-            depth_loss = mse_loss_func(predict_depths, gt_depths) * args.l_depth
+            with torch.no_grad():
+                predict_depths = depth_unet(rgbs)
+                predict_depths = predict_depths * masks
 
             # VP Diverse Loss
             input_depths = predict_depths if torch.rand((1,)).item() > args.depth_tf_ratio else gt_depths
@@ -199,16 +197,14 @@ def train(args):
 
             cd_loss = cd_loss_func(predict_points, gt_points) * args.l_cd
 
-            total_loss = vp_div_loss + cd_loss + depth_loss
+            total_loss = vp_div_loss + cd_loss
 
             optimizer.zero_grad()
             total_loss.backward()
             optimizer.step()
 
-            progress_bar.set_description('CD loss = %.6f, depth loss = %.6f, VP diverse loss = %.6f'
-                                         % (cd_loss.item(), depth_loss.item(), vp_div_loss.item()))
+            progress_bar.set_description('CD Loss = %.6f, VP Div Loss = %.6f' % (cd_loss.item(), vp_div_loss.item()))
 
-            avg_losses['depth'] += depth_loss.item()
             avg_losses['cd'] += cd_loss.item()
             avg_losses['vp_div'] += vp_div_loss.item()
             n += 1
@@ -226,13 +222,12 @@ def train(args):
             avg_losses[key] /= n
             epoch_train_losses[key].append(avg_losses[key])
 
-        print('Epoch %d avg loss: CD loss = %.6f, depth loss = %.6f, VP diverse loss = %.6f\n'
-              % (epoch + 1, avg_losses['cd'], avg_losses['depth'], avg_losses['vp_div']))
+        print('Epoch %d avg loss: CD loss = %.6f, VP diverse loss = %.6f\n'
+              % (epoch + 1, avg_losses['cd'], avg_losses['vp_div']))
 
         # Record some result
         if (epoch+1) % args.checkpoint_epoch_interval == 0:
-            model_dict = {'depth_unet': depth_unet.state_dict(),
-                          'depth_en': depth_en.state_dict(),
+            model_dict = {'depth_en': depth_en.state_dict(),
                           'translate_de': translate_de.state_dict(),
                           'volume_rotate_de': volume_rotate_de.state_dict()}
 
