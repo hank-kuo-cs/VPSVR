@@ -37,7 +37,8 @@ def parse_arguments():
 
     # Loss weight
     parser.add_argument('--l_vpdiv', type=float, default=0.5, help='lambda of vp diverse loss')
-    parser.add_argument('--l_cd', type=float, default=1.0, help='lambda of cd loss')
+    parser.add_argument('--l_cd', type=float, default=1.0, help='lambda of obj reconstruct cd loss')
+    parser.add_argument('--l_part_cd', type=float, default=1.0, help='lambda of part reconstruct cd loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
     # Volumetric Primitive
@@ -128,6 +129,38 @@ def get_vp_features(vp_centers: torch.Tensor, imgs: torch.Tensor, perceptual_fea
     return torch.cat([vp_local_features, sym_local_features], -1)
 
 
+def get_part_gt_points(gt_points: torch.Tensor, vp_indices: torch.Tensor, vp_num: int):
+    B = gt_points.size(0)
+
+    part_gt_points = [[] for i in range(vp_num)]  # len = K
+    max_point_nums = [0 for i in range(vp_num)]  # len = K
+
+    for k in range(vp_num):
+        for b in range(B):
+            part_gt_points_one_batch = gt_points[b, vp_indices[b] == k]
+            if max_point_nums[k] < part_gt_points_one_batch.size(0):
+                max_point_nums[k] = part_gt_points_one_batch.size(0)
+            part_gt_points[k].append(part_gt_points_one_batch)
+
+    for k in range(vp_num):
+        for b in range(B):
+            n = part_gt_points[k][b].size(0)
+
+            if n < max_point_nums[k]:
+                deplicate_part_gt_points = torch.zeros((max_point_nums[k], 3))
+                deplicate_part_gt_points[0: n, :] = part_gt_points[k][b]
+                deplicate_part_gt_points[n:, :] = part_gt_points[k][b][0].expand((max_point_nums[k] - n, 3))
+                part_gt_points[k][b] = deplicate_part_gt_points[None]
+
+            else:
+                part_gt_points[k][b] = part_gt_points[k][b][None]
+
+    for k in range(vp_num):
+        part_gt_points[k] = torch.cat(part_gt_points[k])
+
+    return part_gt_points
+
+
 def train(args):
     dataset = GenReDataset(args, 'train') if args.dataset == 'genre' else R2N2Dataset(args, 'train')
     print('Load %s training dataset, size =' % args.dataset, len(dataset))
@@ -143,18 +176,18 @@ def train(args):
         {'params': volume_rotate_de.parameters(), 'lr': args.lr_volume_rotate_de},
     ], betas=(args.beta1, args.beta2))
 
-    l1_loss_func, mse_loss_func, cd_loss_func = L1Loss(), MSELoss(), ChamferDistanceLoss()
+    cd_loss_func = ChamferDistanceLoss()
 
-    epoch_train_losses = {'cd': [], 'vp_div': []}
+    epoch_train_losses = {'obj_cd': [], 'vp_div': [], 'part_cd': []}
+
+    depth_unet.eval()
+    depth_en.train()
+    translate_de.train()
+    volume_rotate_de.train()
 
     for epoch in range(args.epochs):
-        depth_unet.eval()
-        depth_en.train()
-        translate_de.train()
-        volume_rotate_de.train()
-
         n = 0
-        avg_losses = {'cd': 0.0, 'vp_div': 0.0}
+        avg_losses = {'obj_cd': 0.0, 'vp_div': 0.0, 'part_cd': 0.0}
 
         progress_bar = tqdm(dataloader)
 
@@ -179,12 +212,13 @@ def train(args):
             global_features, perceptual_feature_list = depth_en(input_depths)
 
             translates = translate_de(global_features)
-            vp_center_points = torch.cat([t[:, None, :] for t in translates], 1)  # (B, K, 3)
-            vp_div_loss = cd_loss_func(vp_center_points, gt_points, w1=args.vpdiv_w1) * args.l_vpdiv
+            vp_centers = torch.cat([t[:, None, :] for t in translates], 1)  # (B, K, 3)
+            vp_div_loss, _, vp_indices = cd_loss_func(vp_centers, gt_points, w1=args.vpdiv_w1, return_indices=True)
+            vp_div_loss *= args.l_vpdiv
 
             # CD loss
             volumes, rotates = [], []
-            vp_features = get_vp_features(vp_center_points, input_depths, perceptual_feature_list,  # (B, K, F)
+            vp_features = get_vp_features(vp_centers, input_depths, perceptual_feature_list,  # (B, K, F)
                                           dists, elevs, azims, use_symmetry=args.use_symmetry)
             for i in range(vp_num):
                 one_vp_feature = vp_features[:, i, :]  # (B, F)
@@ -197,16 +231,27 @@ def train(args):
 
             cd_loss = cd_loss_func(predict_points, gt_points) * args.l_cd
 
-            total_loss = vp_div_loss + cd_loss
+            part_point_num = predict_points.size(1) // vp_num
+            part_cd_loss = 0.0
+
+            for i in range(vp_num):
+                part_predict_points = predict_points[:, i*part_point_num: (i+1)*part_point_num, ...]
+                part_gt_points = get_part_gt_points(gt_points, vp_indices, vp_num)
+
+                part_cd_loss += cd_loss_func(part_predict_points, part_gt_points)
+
+            total_loss = vp_div_loss + cd_loss + part_cd_loss
 
             optimizer.zero_grad()
             total_loss.backward()
             optimizer.step()
 
-            progress_bar.set_description('CD Loss = %.6f, VP Div Loss = %.6f' % (cd_loss.item(), vp_div_loss.item()))
+            progress_bar.set_description('Obj CD Loss = %.6f, Part CD Loss = %.6f, VP Div Loss = %.6f'
+                                         % (cd_loss.item(), part_cd_loss.item(), vp_div_loss.item()))
 
-            avg_losses['cd'] += cd_loss.item()
+            avg_losses['obj_cd'] += cd_loss.item()
             avg_losses['vp_div'] += vp_div_loss.item()
+            avg_losses['part_cd'] += part_cd_loss.item()
             n += 1
 
             if n % args.record_batch_interval == 0 and (epoch + 1) % 5 == 0:
@@ -222,8 +267,8 @@ def train(args):
             avg_losses[key] /= n
             epoch_train_losses[key].append(avg_losses[key])
 
-        print('Epoch %d avg loss: CD loss = %.6f, VP diverse loss = %.6f\n'
-              % (epoch + 1, avg_losses['cd'], avg_losses['vp_div']))
+        print('Epoch %d avg loss: Obj CD Loss = %.6f, Part CD Loss = %.6f, VP Div Loss = %.6f\n'
+              % (epoch + 1, avg_losses['obj_cd'], avg_losses['part_cd'], avg_losses['vp_div']))
 
         # Record some result
         if (epoch+1) % args.checkpoint_epoch_interval == 0:
