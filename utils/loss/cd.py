@@ -6,8 +6,7 @@ class ChamferDistanceLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, points1: torch.Tensor, points2: torch.Tensor, w1=1.0, w2=1.0,
-                each_batch=False, return_indices=False):
+    def forward(self, points1: torch.Tensor, points2: torch.Tensor, w1=1.0, w2=1.0, each_batch=False):
         self.check_parameters(points1)
         self.check_parameters(points2)
 
@@ -30,7 +29,7 @@ class ChamferDistanceLoss(nn.Module):
         if not each_batch:
             loss = loss.mean()
 
-        return loss, indices1, indices2 if return_indices else loss
+        return loss, indices1, indices2
 
     @staticmethod
     def check_parameters(points: torch.Tensor):

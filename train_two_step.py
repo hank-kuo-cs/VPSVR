@@ -213,7 +213,7 @@ def train(args):
 
             translates = translate_de(global_features)
             vp_centers = torch.cat([t[:, None, :] for t in translates], 1)  # (B, K, 3)
-            vp_div_loss, _, vp_indices = cd_loss_func(vp_centers, gt_points, w1=args.vpdiv_w1, return_indices=True)
+            vp_div_loss, _, vp_indices = cd_loss_func(vp_centers, gt_points, w1=args.vpdiv_w1)
             vp_div_loss *= args.l_vpdiv
 
             # CD loss
@@ -229,16 +229,17 @@ def train(args):
             predict_points = Sampling.sample_vp_points(volumes, rotates, translates,
                                                        cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
 
-            cd_loss = cd_loss_func(predict_points, gt_points) * args.l_cd
+            cd_loss, _, _ = cd_loss_func(predict_points, gt_points)
+            cd_loss *= args.l_cd
 
             part_point_num = predict_points.size(1) // vp_num
             part_cd_loss = 0.0
 
-            for i in range(vp_num):
-                part_predict_points = predict_points[:, i*part_point_num: (i+1)*part_point_num, ...]
-                part_gt_points = get_part_gt_points(gt_points, vp_indices, vp_num)
+            part_gt_points = get_part_gt_points(gt_points, vp_indices, vp_num)
 
-                part_cd_loss += cd_loss_func(part_predict_points, part_gt_points)
+            for i in range(vp_num):
+                part_cd_loss += cd_loss_func(predict_points[:, i*part_point_num: (i+1)*part_point_num, :],
+                                             part_gt_points[i])[0] * args.l_part_cd
 
             total_loss = vp_div_loss + cd_loss + part_cd_loss
 

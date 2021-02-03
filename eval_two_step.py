@@ -180,7 +180,7 @@ def eval(args):
                                             cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
         predict_points = Sampling.sample_mesh_points(predict_meshes, sample_num=1024)
 
-        cd_loss = cd_loss_func(predict_points, gt_points, each_batch=True)
+        cd_loss = cd_loss_func(predict_points, gt_points, each_batch=True)[0]
 
         batch_size = rgbs.size(0)
         for b in range(batch_size):
