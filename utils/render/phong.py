@@ -4,7 +4,6 @@ from kaolin.graphics import DIBRenderer
 
 
 material = torch.tensor([[[0.7, 0.7, 0.7], [0.9, 0.9, 0.9], [0.3, 0.3, 0.3]]], dtype=torch.float).cuda()
-light = torch.tensor([[0, 10, -10]], dtype=torch.float).cuda()
 shininess = torch.tensor([1], dtype=torch.float).cuda()
 
 
@@ -13,7 +12,10 @@ class PhongRenderer:
         pass
 
     @classmethod
-    def render(cls, mesh: TriangleMesh, dist, elev, azim, uv=None, texture=None, img_size=256):
+    def render_single_image_with_single_mesh(cls, mesh: TriangleMesh,
+                                             dist, elev, azim,
+                                             uv=None, texture=None,
+                                             img_size=256, light_direction=None):
         renderer = DIBRenderer(img_size, img_size, mode='Phong')
 
         cls.check_mesh_parameters(mesh, uv, texture)
@@ -28,10 +30,42 @@ class PhongRenderer:
             uv = torch.rand((1, vertices.size(1), 2)).cuda()
             texture = torch.full((1, 3, 1, 1), fill_value=0.7 * 255).cuda()
 
+        if light_direction is None:
+            light_direction = torch.tensor([[-10, 5, 10]], dtype=torch.float).cuda()
+
         render_imgs, render_alphas, face_norms = renderer.forward(points=[vertices, faces],
                                                                   uv_bxpx2=uv,
                                                                   texture_bx3xthxtw=texture,
-                                                                  lightdirect_bx3=light,
+                                                                  lightdirect_bx3=light_direction,
+                                                                  material_bx3x3=material,
+                                                                  shininess_bx1=shininess)
+        return render_imgs, render_alphas, face_norms
+
+    @classmethod
+    def render_multiple_images_with_single_mesh(cls, mesh: TriangleMesh,
+                                                dists: list, elevs: list, azims: list,
+                                                uv=None, texture=None,
+                                                img_size=256, light_direction=None):
+        renderer = DIBRenderer(img_size, img_size, mode='Phong')
+
+        cls.check_mesh_parameters(mesh, uv, texture)
+
+        renderer.set_look_at_parameters(azims, elevs, dists)
+
+        vertices = mesh.vertices.clone().cuda()[None]
+        faces = mesh.faces.clone().cuda()
+
+        if uv is None and texture is None:
+            uv = torch.rand((1, vertices.size(1), 2)).cuda()
+            texture = torch.full((1, 3, 1, 1), fill_value=0.7 * 255).cuda()
+
+        if light_direction is None:
+            light_direction = torch.tensor([[-10, 5, 10]], dtype=torch.float).cuda()
+
+        render_imgs, render_alphas, face_norms = renderer.forward(points=[vertices, faces],
+                                                                  uv_bxpx2=uv,
+                                                                  texture_bx3xthxtw=texture,
+                                                                  lightdirect_bx3=light_direction,
                                                                   material_bx3x3=material,
                                                                   shininess_bx1=shininess)
         return render_imgs, render_alphas, face_norms
