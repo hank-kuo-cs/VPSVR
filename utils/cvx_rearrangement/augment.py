@@ -42,6 +42,9 @@ def random_cutout(part_meshes: list, symmetry_indices: list) -> list:
     assert isinstance(part_meshes[0], trimesh.Trimesh)
 
     symmetry_indices = [idx for idx, sym_type in enumerate(symmetry_indices) if sym_type > 0]
+    if len(symmetry_indices) < 2:
+        return part_meshes
+
     cutout_num = random.randint(0, len(symmetry_indices) - 1)
     cutout_indices = random.sample(symmetry_indices, cutout_num)
 
