@@ -1,6 +1,7 @@
 import torch
 from .rotate import rotate_points
 from .translate import translate_points
+from .symmetry import get_symmetrical_points
 
 
 def transform_points(points: torch.Tensor, q: torch.Tensor, t: torch.Tensor):

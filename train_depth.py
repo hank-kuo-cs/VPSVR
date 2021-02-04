@@ -62,7 +62,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 
 from dataset import GenReDataset, R2N2Dataset, collate_func
-from model import DepthEstimationNet, DepthDiscriminator
+from model import DepthEstimationUNet, DepthDiscriminator
 from utils.render import DepthRenderer
 from utils.visualize import save_depth_result
 
@@ -85,7 +85,7 @@ def train(args):
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size,
                             num_workers=8, shuffle=True, collate_fn=collate_func)
     checkpoint_paths, record_paths = set_path()
-    den = DepthEstimationNet().cuda()
+    den = DepthEstimationUNet().cuda()
     dis = DepthDiscriminator().cuda()
 
     optimizer_den = Adam(params=den.parameters(), lr=args.lr_den,

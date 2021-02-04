@@ -48,7 +48,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 
 from dataset import GenReDataset, R2N2Dataset, collate_func, CLASS_DICT
-from model import DepthEstimationNet
+from model import DepthEstimationUNet
 from utils.render import DepthRenderer
 from utils.visualize import save_depth_result
 
@@ -72,7 +72,7 @@ def eval(args):
                             num_workers=8, shuffle=False, collate_fn=collate_func)
     checkpoint_path, record_paths = set_path(args)
 
-    den = DepthEstimationNet().cuda()
+    den = DepthEstimationUNet().cuda()
     den.load_state_dict(torch.load(checkpoint_path))
     den.eval()
 

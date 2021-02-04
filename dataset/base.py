@@ -3,6 +3,11 @@ from PIL import Image
 from torchvision.transforms import transforms
 
 
+CLASS_DICT = {'02691156': 'airplane', '04090263': 'rifle', '03211117': 'display', '04379243': 'table',
+              '04401088': 'telephone', '02958343': 'car', '03001627': 'chair', '02828884': 'bench', '03636649': 'lamp',
+              '02933112': 'cabinet', '03691459': 'loudspeaker', '04256520': 'sofa', '04530566': 'watercraft'}
+
+
 def collate_func(batch_data):
     check_data_keys(batch_data[0])
     collate_data = {'rgb': [], 'mask': [],
@@ -15,7 +20,7 @@ def collate_func(batch_data):
             if key in ['rgb', 'mask']:
                 collate_data[key].append(batch_data[i][key][None])
             elif key in ['dist', 'elev', 'azim']:
-                collate_data[key].append(torch.tensor(batch_data[i][key], dtype=torch.float)[None])
+                collate_data[key].append(torch.tensor(batch_data[i][key], dtype=torch.float).view(1, 1))
             else:
                 collate_data[key].append(batch_data[i][key])
 

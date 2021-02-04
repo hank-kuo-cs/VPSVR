@@ -100,7 +100,7 @@ class GenReDataset(Dataset):
         dist = torch.sqrt(torch.tensor(x ** 2 + y ** 2 + z ** 2))
         elev = 90 - torch.acos(y / dist).item() / (2 * 3.14159265359) * 360
         azim = (90 + torch.atan(torch.tensor(z / x)).item() / (2 * 3.14159265359) * 360) % 360
-        return 1.5, elev, azim
+        return 1.0, elev, azim
 
     @staticmethod
     def _load_mask(mask_path):

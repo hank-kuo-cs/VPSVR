@@ -34,8 +34,9 @@ def parse_arguments():
 
     # Loss weight
     parser.add_argument('--l_depth', type=float, default=1.0, help='lambda of depth estimation loss')
-    parser.add_argument('--l_vpdiv', type=float, default=0.1, help='lambda of vp diverse loss')
+    parser.add_argument('--l_vpdiv', type=float, default=0.5, help='lambda of vp diverse loss')
     parser.add_argument('--l_cd', type=float, default=1.0, help='lambda of cd loss')
+    parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
     # Network
     parser.add_argument('--sphere_num', type=int, default=8, help='number of spheres')
@@ -69,7 +70,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 
 from dataset import GenReDataset, R2N2Dataset, collate_func
-from model import VolumetricPrimitiveNet, DepthEstimationNet
+from model import VolumetricPrimitiveNet, DepthEstimationUNet
 from utils.sampling import Sampling
 from utils.meshing import Meshing
 from utils.loss import ChamferDistanceLoss
@@ -78,7 +79,7 @@ from utils.visualize import save_depth_result, save_mesh_result
 
 
 def load_model(args):
-    den = DepthEstimationNet().cuda()
+    den = DepthEstimationUNet().cuda()
     vpn = VolumetricPrimitiveNet(vp_num=args.sphere_num + args.cuboid_num).cuda()
 
     return den, vpn
@@ -146,7 +147,7 @@ def train(args):
 
             vp_center_points = torch.cat([t[:, None, :] for t in translates], 1)
 
-            vp_div_loss = cd_loss_func(vp_center_points, gt_points, w1=0.5) * args.l_vpdiv
+            vp_div_loss = cd_loss_func(vp_center_points, gt_points, w1=args.vpdiv_w1) * args.l_vpdiv
 
             # CD loss
             predict_points = Sampling.sample_vp_points(volumes, rotates, translates,
@@ -154,7 +155,7 @@ def train(args):
 
             cd_loss = cd_loss_func(predict_points, gt_points) * args.l_cd
 
-            total_loss = vp_div_loss + cd_loss
+            total_loss = vp_div_loss + cd_loss + depth_loss
 
             optimizer.zero_grad()
             total_loss.backward()
