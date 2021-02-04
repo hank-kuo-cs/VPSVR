@@ -146,14 +146,12 @@ def get_part_gt_points(gt_points: torch.Tensor, vp_indices: torch.Tensor, vp_num
         for b in range(B):
             n = part_gt_points[k][b].size(0)
 
-            if n < max_point_nums[k]:
-                deplicate_part_gt_points = torch.zeros((max_point_nums[k], 3))
+            deplicate_part_gt_points = torch.zeros((max_point_nums[k], 3)).cuda()
+            if 0 < n < max_point_nums[k]:
                 deplicate_part_gt_points[0: n, :] = part_gt_points[k][b]
                 deplicate_part_gt_points[n:, :] = part_gt_points[k][b][0].expand((max_point_nums[k] - n, 3))
-                part_gt_points[k][b] = deplicate_part_gt_points[None]
 
-            else:
-                part_gt_points[k][b] = part_gt_points[k][b][None]
+            part_gt_points[k][b] = deplicate_part_gt_points[None]
 
     for k in range(vp_num):
         part_gt_points[k] = torch.cat(part_gt_points[k])
