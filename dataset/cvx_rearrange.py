@@ -1,5 +1,6 @@
 import os
 import json
+from argparse import Namespace
 from glob import glob
 from kaolin.rep import TriangleMesh
 from PIL import Image
@@ -41,7 +42,8 @@ class ConvexRearrangementDataset(Dataset):
                 'faces': faces,
                 'dist': dist,
                 'elev': elev,
-                'azim': azim}
+                'azim': azim,
+                'class_id': None}
 
     def _load_data(self):
         if self.args.cvx_add_genre:
@@ -67,7 +69,7 @@ class ConvexRearrangementDataset(Dataset):
                 })
 
     def _load_genre(self):
-        genre_args = self.args
+        genre_args = Namespace(**vars(self.args))
         genre_args.size = self.args.genre_size
         genre_args.root = self.args.genre_root
         genre_dataset = GenReDataset(self.args, 'train')
