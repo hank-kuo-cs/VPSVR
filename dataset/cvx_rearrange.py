@@ -15,16 +15,16 @@ class ConvexRearrangementDataset(Dataset):
 
         self.args = args
         self.samples = []
-        self.genre_samples = []
+        self.genre_dataset = []
 
         self._load_data()
 
     def __len__(self):
-        return len(self.samples) + len(self.genre_samples)
+        return len(self.samples) + len(self.genre_dataset)
 
     def __getitem__(self, item):
         if item > len(self.samples):
-            return self.genre_samples[item - len(self.samples)]
+            return self.genre_dataset[item - len(self.samples)]
 
         sample = self.samples[item]
         rgb_path, mask_path = sample['rgb_path'], sample['mask_path']
@@ -72,8 +72,7 @@ class ConvexRearrangementDataset(Dataset):
         genre_args = Namespace(**vars(self.args))
         genre_args.size = self.args.genre_size
         genre_args.root = self.args.genre_root
-        genre_dataset = GenReDataset(self.args, 'train')
-        self.genre_samples = genre_dataset.samples
+        self.genre_dataset = GenReDataset(genre_args, 'train')
 
     def _load_rgb(self, rgb_path):
         is_color_jitter = True
