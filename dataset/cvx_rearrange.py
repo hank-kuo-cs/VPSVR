@@ -9,7 +9,7 @@ from .genre import GenReDataset
 
 
 class ConvexRearrangementDataset(Dataset):
-    def __init__(self, args):
+    def __init__(self, args, dataset_type=None):
         super().__init__()
 
         self.args = args

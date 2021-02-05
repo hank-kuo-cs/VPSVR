@@ -82,9 +82,9 @@ def set_path():
 
 
 def train(args):
-    dataset = {'genre': GenReDataset(args, 'train'),
-               '3dr2n2': R2N2Dataset(args, 'train'),
-               'cvx_rearrange': ConvexRearrangementDataset(args)}[args.dataset]
+    dataset = {'genre': GenReDataset,
+               '3dr2n2': R2N2Dataset,
+               'cvx_rearrange': ConvexRearrangementDataset}[args.dataset](args, 'train')
     print('Load %s training dataset, size =' % args.dataset, len(dataset))
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size,
                             num_workers=8, shuffle=True, collate_fn=collate_func)
