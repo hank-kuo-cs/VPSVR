@@ -22,11 +22,14 @@ def parse_arguments():
     parser.add_argument('--use_symmetry', action='store_true', help='whether use symmetry features fusion')
 
     # Dataset Setting
-    parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2"')
-    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='the root directory of dataset')
+    parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2", "cvx_rearrange"')
+    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of dataset')
+    parser.add_argument('--genre_root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of genre')
+    parser.add_argument('--cvx_add_genre', action='store_true', help='cvx rearrangement dataset concat with genre')
     parser.add_argument('--depth_unet_path', type=str, default='checkpoint/depth_unet.pth')
     parser.add_argument('--size', type=int, default=0, help='0 indicates all of the dataset, '
                                                             'or it will divide equally on all classes')
+    parser.add_argument('--genre_size', type=int, default=0, help='concated genre dataset size')
 
     # Optimizer
     parser.add_argument('--lr_depth_en', type=float, default=1e-5, help='learning rate of depth encoder')
@@ -74,7 +77,7 @@ set_seed(args.manual_seed)
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 
-from dataset import GenReDataset, R2N2Dataset, collate_func
+from dataset import GenReDataset, R2N2Dataset, ConvexRearrangementDataset, collate_func
 from model import DepthEstimationUNet
 from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder
 from utils.sampling import Sampling
@@ -160,7 +163,9 @@ def get_part_gt_points(gt_points: torch.Tensor, vp_indices: torch.Tensor, vp_num
 
 
 def train(args):
-    dataset = GenReDataset(args, 'train') if args.dataset == 'genre' else R2N2Dataset(args, 'train')
+    dataset = {'genre': GenReDataset(args, 'train'),
+               '3dr2n2': R2N2Dataset(args, 'train'),
+               'cvx_rearrange': ConvexRearrangementDataset(args)}[args.dataset]
     print('Load %s training dataset, size =' % args.dataset, len(dataset))
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size,
                             num_workers=8, shuffle=True, collate_fn=collate_func)
