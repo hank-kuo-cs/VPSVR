@@ -88,12 +88,11 @@ def load_model(args):
     translate_de = TranslateDecoder(vp_num=args.cuboid_num + args.sphere_num).cuda()
     translate_de.load_state_dict(torch.load(translate_de_path))
 
-    global_feature_dim = 512
     local_feature_dim = 960 * 2 if args.use_symmetry else 960
 
     volume_rotate_de_path = 'checkpoint/volume_rotate_de/volume_rotate_de_epoch%03d.pth' % args.epoch \
         if not args.volume_rotate_de_path else args.volume_rotate_de_path
-    volume_rotate_de = VolumeRotateDecoder(feature_dim=global_feature_dim + local_feature_dim).cuda()
+    volume_rotate_de = VolumeRotateDecoder(feature_dim=local_feature_dim).cuda()
     volume_rotate_de.load_state_dict(torch.load(volume_rotate_de_path))
 
     return depth_unet, depth_en, translate_de, volume_rotate_de
@@ -172,7 +171,7 @@ def eval(args):
                                       dists, elevs, azims, use_symmetry=args.use_symmetry)
         for i in range(vp_num):
             one_vp_feature = vp_features[:, i, :]  # (B, F)
-            volume, rotate = volume_rotate_de(global_features, one_vp_feature)
+            volume, rotate = volume_rotate_de(one_vp_feature)
             volumes.append(volume)
             rotates.append(rotate)
 

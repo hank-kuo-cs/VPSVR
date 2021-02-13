@@ -96,9 +96,8 @@ def load_model(args):
 
     translate_de = TranslateDecoder(vp_num=args.cuboid_num + args.sphere_num).cuda()
 
-    global_feature_dim = 512
     local_feature_dim = 960 * 2 if args.use_symmetry else 960
-    volume_rotate_de = VolumeRotateDecoder(feature_dim=global_feature_dim + local_feature_dim).cuda()
+    volume_rotate_de = VolumeRotateDecoder(feature_dim=local_feature_dim).cuda()
 
     return depth_unet, depth_en, translate_de, volume_rotate_de
 
@@ -224,7 +223,7 @@ def train(args):
                                           dists, elevs, azims, use_symmetry=args.use_symmetry)
             for i in range(vp_num):
                 one_vp_feature = vp_features[:, i, :]  # (B, F)
-                volume, rotate = volume_rotate_de(global_features, one_vp_feature)
+                volume, rotate = volume_rotate_de(one_vp_feature)
                 volumes.append(volume)
                 rotates.append(rotate)
 

@@ -14,9 +14,8 @@ class VolumeRotateDecoder(nn.Module):
 
         self.fc = self._make_linear(self.feature_dim)
 
-    def forward(self, global_features: torch.Tensor, local_features: torch.Tensor):
-        features = torch.cat([global_features, local_features], 1)
-        out = self.fc(features)
+    def forward(self, local_features: torch.Tensor):
+        out = self.fc(local_features)
 
         volumes = out[..., :3]
         rotates = out[..., 3:]

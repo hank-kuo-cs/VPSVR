@@ -25,7 +25,7 @@ def parse_arguments():
     parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='the root directory of dataset')
     parser.add_argument('--genre_root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of genre')
     parser.add_argument('--cvx_add_genre', action='store_true', help='cvx rearrangement dataset concat with genre')
-    parser.add_argument('--size', type=int, default=0, help='the size will divide equally on all classes')
+    parser.add_argument('--size', type=int, default=120000, help='the size will divide equally on all classes')
     parser.add_argument('--genre_size', type=int, default=60000, help='concated genre dataset size')
 
     # Optimizer
