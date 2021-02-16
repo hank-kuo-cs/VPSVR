@@ -199,8 +199,8 @@ def eval(args):
             depth_save_path = os.path.join(record_paths['depth'], 'batch%d.png' % (idx + 1))
             vp_save_path = os.path.join(record_paths['vp'], 'batch%d.png' % (idx + 1))
 
-            save_depth_result(rgbs[0], predict_depths[0], gt_depths[0], depth_save_path)
-            save_mesh_result(rgbs[0], input_depths[0],
+            save_depth_result(rgbs[0], masks[0], predict_depths[0], gt_depths[0], depth_save_path)
+            save_mesh_result(rgbs[0], masks[0], input_depths[0],
                              predict_meshes[0], gt_meshes[0],
                              args.cuboid_num + args.sphere_num, vp_save_path)
 
