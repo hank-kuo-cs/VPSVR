@@ -23,7 +23,7 @@ class ConvexRearrangementDataset(Dataset):
         return len(self.samples) + len(self.genre_dataset)
 
     def __getitem__(self, item):
-        if item > len(self.samples):
+        if item >= len(self.samples):
             return self.genre_dataset[item - len(self.samples)]
 
         sample = self.samples[item]
