@@ -312,7 +312,7 @@ def train(args):
             model_dict = {'depth_en': depth_en.state_dict(),
                           'translate_de': translate_de.state_dict(),
                           'volume_rotate_de': volume_rotate_de.state_dict(),
-                          'deform_de': deform_de.state_dice()}
+                          'deform_de': deform_de.state_dict()}
 
             for network_name, model_weight in model_dict.items():
                 model_path = os.path.join(checkpoint_paths[network_name], '%s_epoch%03d.pth' % (network_name, epoch+1))
