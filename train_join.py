@@ -5,8 +5,8 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 from torch.optim import Adam
-from torch.nn import L1Loss, MSELoss
 from torch.utils.data import DataLoader
+from kaolin.rep import TriangleMesh
 
 
 def parse_arguments():
@@ -34,13 +34,17 @@ def parse_arguments():
     parser.add_argument('--lr_depth_en', type=float, default=1e-5, help='learning rate of depth encoder')
     parser.add_argument('--lr_translate_de', type=float, default=1e-5, help='learning rate of translate decoder')
     parser.add_argument('--lr_volume_rotate_de', type=float, default=1e-5, help='learning rate of volume rotate decoder')
+    parser.add_argument('--lr_deform_de', type=float, default=1e-5, help='learning rate of deformation decoder')
     parser.add_argument('--beta1', type=float, default=0.5, help='beta1 of Adam optimizer')
     parser.add_argument('--beta2', type=float, default=0.9, help='beta2 of Adam optimizer')
 
     # Loss weight
     parser.add_argument('--l_vpdiv', type=float, default=0.5, help='lambda of vp diverse loss')
-    parser.add_argument('--l_cd', type=float, default=1.0, help='lambda of obj reconstruct cd loss')
-    parser.add_argument('--l_part_cd', type=float, default=1.0, help='lambda of part reconstruct cd loss')
+    parser.add_argument('--l_vp_cd', type=float, default=1.0, help='lambda of global vp reconstruct cd loss')
+    parser.add_argument('--l_part_cd', type=float, default=1.0, help='lambda of part vp reconstruct cd loss')
+    parser.add_argument('--l_deform_cd', type=float, default=1.0, help='lambda of deformed mesh reconstruct cd loss')
+    parser.add_argument('--l_lap', type=float, default=0.1, help='lambda of laplacian regularization')
+    parser.add_argument('--l_normal', type=float, default=0.001, help='lambda of normal loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
     # Volumetric Primitive
@@ -55,7 +59,7 @@ def parse_arguments():
     parser.add_argument('--output_path', type=str, default='./output/train')
     parser.add_argument('--checkpoint_path', type=str, default='./checkpoint')
     parser.add_argument('--record_batch_interval', type=int, default=100, help='record prediction result every N batch')
-    parser.add_argument('--checkpoint_epoch_interval', type=int, default=5, help='record model checkpoint every N epoch')
+    parser.add_argument('--checkpoint_epoch_interval', type=int, default=10, help='record model checkpoint every N epoch')
 
     return parser.parse_args()
 
@@ -78,10 +82,10 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 from dataset import GenReDataset, R2N2Dataset, ConvexRearrangementDataset, collate_func
 from model import DepthEstimationUNet
-from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder
+from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformDecoder
 from utils.sampling import Sampling
 from utils.meshing import Meshing
-from utils.loss import ChamferDistanceLoss
+from utils.loss import ChamferDistanceLoss, ChamferNormalLoss, LaplacianRegularization
 from utils.render import DepthRenderer
 from utils.perceptual import get_local_features
 from utils.transform import get_symmetrical_points
@@ -99,17 +103,20 @@ def load_model(args):
     local_feature_dim = 960 * 2 if args.use_symmetry else 960
     volume_rotate_de = VolumeRotateDecoder(feature_dim=local_feature_dim).cuda()
 
-    return depth_unet, depth_en, translate_de, volume_rotate_de
+    global_feature_dim = 512
+    deform_de = DeformDecoder(feature_dim=local_feature_dim+global_feature_dim).cuda()
+
+    return depth_unet, depth_en, translate_de, volume_rotate_de, deform_de
 
 
 def set_path(args):
-    network_names = ['depth_en', 'translate_de', 'volume_rotate_de']
+    network_names = ['depth_en', 'translate_de', 'volume_rotate_de', 'deform_de']
     checkpoint_paths = {}
     for network_name in network_names:
         checkpoint_paths[network_name] = os.path.join(args.checkpoint_path, network_name)
         os.makedirs(checkpoint_paths[network_name], exist_ok=True)
 
-    record_names = ['loss', 'depth', 'vp']
+    record_names = ['loss', 'depth', 'vp', 'mesh']
     record_paths = {}
     for record_name in record_names:
         record_paths[record_name] = os.path.join(args.output_path, record_name)
@@ -170,16 +177,19 @@ def train(args):
 
     vp_num = args.cuboid_num + args.sphere_num
     checkpoint_paths, record_paths = set_path(args)
-    depth_unet, depth_en, translate_de, volume_rotate_de = load_model(args)
+    depth_unet, depth_en, translate_de, volume_rotate_de, deform_de = load_model(args)
     optimizer = Adam(params=[
         {'params': depth_en.parameters(), 'lr': args.lr_depth_en},
         {'params': translate_de.parameters(), 'lr': args.lr_translate_de},
         {'params': volume_rotate_de.parameters(), 'lr': args.lr_volume_rotate_de},
+        {'params': deform_de.parameters(), 'lr': args.lr_deform_de}
     ], betas=(args.beta1, args.beta2))
 
     cd_loss_func = ChamferDistanceLoss()
+    lap_loss_func = LaplacianRegularization()
+    normal_loss_func = ChamferNormalLoss()
 
-    epoch_train_losses = {'obj_cd': [], 'vp_div': [], 'part_cd': []}
+    epoch_train_losses = {'obj_cd': [], 'vp_div': [], 'part_cd': [], 'deform_cd': [], 'lap': [], 'normal': []}
 
     depth_unet.eval()
     depth_en.train()
@@ -188,7 +198,7 @@ def train(args):
 
     for epoch in range(args.epochs):
         n = 0
-        avg_losses = {'obj_cd': 0.0, 'vp_div': 0.0, 'part_cd': 0.0}
+        avg_losses = {'obj_cd': 0.0, 'vp_div': 0.0, 'part_cd': 0.0, 'deform_cd': 0.0, 'lap': 0.0, 'normal': 0.0}
 
         progress_bar = tqdm(dataloader)
 
@@ -218,65 +228,91 @@ def train(args):
             vp_div_loss *= args.l_vpdiv
 
             # CD loss
-            volumes, rotates = [], []
+            volumes, rotates, deforms = [], [], []
             vp_features = get_vp_features(vp_centers, input_depths, perceptual_feature_list,  # (B, K, F)
                                           dists, elevs, azims, use_symmetry=args.use_symmetry)
             for i in range(vp_num):
                 one_vp_feature = vp_features[:, i, :]  # (B, F)
                 volume, rotate = volume_rotate_de(one_vp_feature)
+                deform = deform_de(global_features, one_vp_feature)
                 volumes.append(volume)
                 rotates.append(rotate)
+                deforms.append(deform)
 
-            predict_points = Sampling.sample_vp_points(volumes, rotates, translates,
-                                                       cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
+            pred_coarse_points = Sampling.sample_vp_points(volumes, rotates, translates,
+                                                           cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
 
-            cd_loss, _, _ = cd_loss_func(predict_points, gt_points)
-            cd_loss *= args.l_cd
+            vp_cd_loss, _, _ = cd_loss_func(pred_coarse_points, gt_points)
+            vp_cd_loss *= args.l_vp_cd
 
-            part_point_num = predict_points.size(1) // vp_num
-            part_cd_loss = 0.0
+            part_point_num = pred_coarse_points.size(1) // vp_num
+            part_cd_loss = torch.tensor(0.0).cuda()
+            if args.l_part_cd > 0:
+                part_gt_points = get_part_gt_points(gt_points, vp_indices, vp_num)
 
-            part_gt_points = get_part_gt_points(gt_points, vp_indices, vp_num)
+                for i in range(vp_num):
+                    part_cd_loss += cd_loss_func(pred_coarse_points[:, i*part_point_num: (i+1)*part_point_num, :],
+                                                 part_gt_points[i])[0] * args.l_part_cd
+
+            pred_meshes = Meshing.vp_meshing(volumes, rotates, translates,
+                                             cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
+            vp_meshes = [TriangleMesh.from_tensors(m.vertices.clone(), m.faces.clone()) for m in pred_meshes]
 
             for i in range(vp_num):
-                part_cd_loss += cd_loss_func(predict_points[:, i*part_point_num: (i+1)*part_point_num, :],
-                                             part_gt_points[i])[0] * args.l_part_cd
+                for b in range(len(pred_meshes)):
+                    pred_meshes[b].vertices[i * 128: (i + 1) * 128, :] += deforms[i][b]
 
-            total_loss = vp_div_loss + cd_loss + part_cd_loss
+            pred_fine_points = torch.cat([m.sample(2048)[0][None] for m in pred_meshes])
+            deform_cd_loss, _, _ = cd_loss_func(pred_fine_points, gt_points)
+            deform_cd_loss *= args.l_deform_cd
+
+            lap_loss = lap_loss_func(vp_meshes, pred_meshes) * args.l_lap if args.l_lap > 0 else torch.tensor(0.0).cuda()
+            normal_loss = normal_loss_func(pred_meshes, vertices, faces) * args.l_normal if args.l_normal > 0 else torch.tensor(0.0).cuda()
+
+            total_loss = vp_div_loss + vp_cd_loss + part_cd_loss + deform_cd_loss
 
             optimizer.zero_grad()
             total_loss.backward()
             optimizer.step()
 
-            progress_bar.set_description('Obj CD Loss = %.6f, Part CD Loss = %.6f, VP Div Loss = %.6f'
-                                         % (cd_loss.item(), part_cd_loss.item(), vp_div_loss.item()))
+            progress_bar.set_description('Obj CD Loss = %.6f, Part CD Loss = %.6f, VP Div Loss = %.6f, '
+                                         'Deform CD Loss = %.6f, Lap Loss = %.6f, Normal Loss = %.6f'
+                                         % (vp_cd_loss.item(), part_cd_loss.item(), vp_div_loss.item(),
+                                            deform_cd_loss.item(), lap_loss.item(), normal_loss.item()))
 
-            avg_losses['obj_cd'] += cd_loss.item()
+            avg_losses['obj_cd'] += vp_cd_loss.item()
             avg_losses['vp_div'] += vp_div_loss.item()
             avg_losses['part_cd'] += part_cd_loss.item()
+            avg_losses['deform_cd'] += deform_cd_loss.item()
+            avg_losses['lap'] += lap_loss.item()
+            avg_losses['normal'] += normal_loss.item()
             n += 1
 
             if n % args.record_batch_interval == 0 and (epoch + 1) % 5 == 0:
-                predict_meshes = Meshing.vp_meshing(volumes, rotates, translates,
-                                                    cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
                 depth_save_path = os.path.join(record_paths['depth'], 'epoch%d-batch%d.png' % (epoch + 1, n))
-                save_depth_result(rgbs[0], predict_depths[0], gt_depths[0], depth_save_path)
+                save_depth_result(rgbs[0], masks[0], predict_depths[0], gt_depths[0], depth_save_path)
 
-                mesh_save_path = os.path.join(record_paths['vp'], 'epoch%d-batch%d.png' % (epoch + 1, n))
-                save_vp_result(rgbs[0], input_depths[0], predict_meshes[0], gt_meshes[0], vp_num, mesh_save_path)
+                vp_save_path = os.path.join(record_paths['vp'], 'epoch%d-batch%d.png' % (epoch + 1, n))
+                save_vp_result(rgbs[0], masks[0], input_depths[0], vp_meshes[0], gt_meshes[0], vp_num, vp_save_path)
+
+                mesh_save_path = os.path.join(record_paths['mesh'], 'epoch%d-batch%d.png' % (epoch + 1, n))
+                save_vp_result(rgbs[0], masks[0], input_depths[0], pred_meshes[0], gt_meshes[0], vp_num, mesh_save_path)
 
         for key in list(avg_losses.keys()):
             avg_losses[key] /= n
             epoch_train_losses[key].append(avg_losses[key])
 
-        print('Epoch %d avg loss: Obj CD Loss = %.6f, Part CD Loss = %.6f, VP Div Loss = %.6f\n'
-              % (epoch + 1, avg_losses['obj_cd'], avg_losses['part_cd'], avg_losses['vp_div']))
+        print('Epoch %d avg loss: Obj CD Loss = %.6f, Part CD Loss = %.6f, VP Div Loss = %.6f, '
+              'Deform CD Loss = %.6f, Lap Loss = %.6f, Normal Loss = %.6f\n'
+              % (epoch + 1, avg_losses['obj_cd'], avg_losses['part_cd'], avg_losses['vp_div'],
+                 avg_losses['deform_cd'], avg_losses['lap'], avg_losses['normal']))
 
         # Record some result
         if (epoch+1) % args.checkpoint_epoch_interval == 0:
             model_dict = {'depth_en': depth_en.state_dict(),
                           'translate_de': translate_de.state_dict(),
-                          'volume_rotate_de': volume_rotate_de.state_dict()}
+                          'volume_rotate_de': volume_rotate_de.state_dict(),
+                          'deform_de': deform_de.state_dice()}
 
             for network_name, model_weight in model_dict.items():
                 model_path = os.path.join(checkpoint_paths[network_name], '%s_epoch%03d.pth' % (network_name, epoch+1))
