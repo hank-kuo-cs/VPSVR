@@ -227,7 +227,7 @@ def eval(args):
             save_vp_result(rgbs[0], masks[0], input_depths[0], vp_meshes[0], gt_meshes[0], vp_num, vp_save_path)
             save_vp_result(rgbs[0], masks[0], input_depths[0], pred_meshes[0], gt_meshes[0], vp_num, mesh_save_path)
 
-    avg_depth_loss, avg_cd_loss = 0.0, 0.0
+    avg_depth_loss, avg_vp_cd_loss, avg_mesh_cd_loss = 0.0, 0.0, 0.0
 
     print('Depth MSE Loss')
     print('id\t\tloss\t\tname')
@@ -249,11 +249,11 @@ def eval(args):
     for k in list(class_losses['vp_cd'].keys()):
         class_losses['vp_cd'][k] = (class_losses['vp_cd'][k] / class_n[k]).item()
         print('%s\t%.6f\t%s' % (k, class_losses['vp_cd'][k], CLASS_DICT[k]))
-        avg_cd_loss += class_losses['vp_cd'][k]
+        avg_vp_cd_loss += class_losses['vp_cd'][k]
 
-    avg_cd_loss /= len(list(class_losses['vp_cd'].keys()))
-    print('total mean vp cd loss = %.6f' % avg_cd_loss)
-    class_losses['vp_cd']['total'] = avg_cd_loss
+    avg_vp_cd_loss /= len(list(class_losses['vp_cd'].keys()))
+    print('total mean vp cd loss = %.6f' % avg_vp_cd_loss)
+    class_losses['vp_cd']['total'] = avg_vp_cd_loss
 
     np.savez(os.path.join(record_paths['loss'], 'vp_cd.npz'), **class_losses['vp_cd'])
 
@@ -263,11 +263,11 @@ def eval(args):
     for k in list(class_losses['mesh_cd'].keys()):
         class_losses['mesh_cd'][k] = (class_losses['mesh_cd'][k] / class_n[k]).item()
         print('%s\t%.6f\t%s' % (k, class_losses['mesh_cd'][k], CLASS_DICT[k]))
-        avg_cd_loss += class_losses['mesh_cd'][k]
+        avg_mesh_cd_loss += class_losses['mesh_cd'][k]
 
-    avg_cd_loss /= len(list(class_losses['mesh_cd'].keys()))
-    print('total mean mesh cd loss = %.6f' % avg_cd_loss)
-    class_losses['mesh_cd']['total'] = avg_cd_loss
+    avg_mesh_cd_loss /= len(list(class_losses['mesh_cd'].keys()))
+    print('total mean mesh cd loss = %.6f' % avg_mesh_cd_loss)
+    class_losses['mesh_cd']['total'] = avg_mesh_cd_loss
 
     np.savez(os.path.join(record_paths['loss'], 'mesh_cd.npz'), **class_losses['mesh_cd'])
 
