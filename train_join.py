@@ -43,8 +43,8 @@ def parse_arguments():
     parser.add_argument('--l_vp_cd', type=float, default=1.0, help='lambda of global vp reconstruct cd loss')
     parser.add_argument('--l_part_cd', type=float, default=1.0, help='lambda of part vp reconstruct cd loss')
     parser.add_argument('--l_deform_cd', type=float, default=1.0, help='lambda of deformed mesh reconstruct cd loss')
-    parser.add_argument('--l_lap', type=float, default=0.1, help='lambda of laplacian regularization')
-    parser.add_argument('--l_normal', type=float, default=0.001, help='lambda of normal loss')
+    parser.add_argument('--l_lap', type=float, default=0.5, help='lambda of laplacian regularization')
+    parser.add_argument('--l_normal', type=float, default=0.5, help='lambda of normal loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
     # Volumetric Primitive
