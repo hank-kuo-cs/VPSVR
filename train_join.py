@@ -235,6 +235,7 @@ def train(args):
                 one_vp_feature = vp_features[:, i, :]  # (B, F)
                 volume, rotate = volume_rotate_de(one_vp_feature)
                 deform = deform_de(global_features, one_vp_feature)
+
                 volumes.append(volume)
                 rotates.append(rotate)
                 deforms.append(deform)
@@ -269,7 +270,7 @@ def train(args):
             lap_loss = lap_loss_func(vp_meshes, pred_meshes) * args.l_lap if args.l_lap > 0 else torch.tensor(0.0).cuda()
             normal_loss = normal_loss_func(pred_meshes, vertices, faces) * args.l_normal if args.l_normal > 0 else torch.tensor(0.0).cuda()
 
-            total_loss = vp_div_loss + vp_cd_loss + part_cd_loss + deform_cd_loss
+            total_loss = vp_div_loss + vp_cd_loss + part_cd_loss + deform_cd_loss + lap_loss + normal_loss
 
             optimizer.zero_grad()
             total_loss.backward()
