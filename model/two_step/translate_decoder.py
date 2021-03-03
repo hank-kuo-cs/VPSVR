@@ -22,7 +22,8 @@ class TranslateDecoder(nn.Module):
     def _make_linear(output_dim: int):
         return nn.Sequential(
             nn.Linear(512, 1024),
-            nn.Linear(1024, 1024),
+            nn.LeakyReLU(),
             nn.Linear(1024, 512),
+            nn.LeakyReLU(),
             nn.Linear(512, output_dim),
         )

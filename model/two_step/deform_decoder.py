@@ -7,8 +7,9 @@ class DeformDecoder(nn.Module):
         super().__init__()
         self.fc = nn.Sequential(
             nn.Linear(feature_dim, 1024),
-            nn.Linear(1024, 1024),
+            nn.LeakyReLU(),
             nn.Linear(1024, 512),
+            nn.LeakyReLU(),
             nn.Linear(512, vertex_num * 3),
         )
         self.tanh = nn.Tanh()
