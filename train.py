@@ -75,7 +75,7 @@ from utils.sampling import Sampling
 from utils.meshing import Meshing
 from utils.loss import ChamferDistanceLoss
 from utils.render import DepthRenderer
-from utils.visualize import save_depth_result, save_mesh_result
+from utils.visualize import save_depth_result, save_vp_result
 
 
 def load_model(args):
@@ -176,9 +176,9 @@ def train(args):
                 save_depth_result(rgbs[0], predict_depths[0], gt_depths[0], depth_save_path)
 
                 mesh_save_path = os.path.join(record_paths['vp'], 'epoch%d-batch%d.png' % (epoch + 1, n))
-                save_mesh_result(rgbs[0], input_depths[0],
-                                 predict_meshes[0], gt_meshes[0],
-                                 args.cuboid_num + args.sphere_num, mesh_save_path)
+                save_vp_result(rgbs[0], input_depths[0],
+                               predict_meshes[0], gt_meshes[0],
+                               args.cuboid_num + args.sphere_num, mesh_save_path)
 
         for key in list(avg_losses.keys()):
             avg_losses[key] /= n

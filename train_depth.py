@@ -21,10 +21,12 @@ def parse_arguments():
     parser.add_argument('--epochs', type=int, default=50, help='training epoch num')
 
     # Dataset Setting
-    parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2"')
+    parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2" or "cvx_rearrange"')
     parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='the root directory of dataset')
-    parser.add_argument('--size', type=int, default=0, help='0 indicates all of the dataset, '
-                                                            'or it will divide equally on all classes')
+    parser.add_argument('--genre_root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of genre')
+    parser.add_argument('--cvx_add_genre', action='store_true', help='cvx rearrangement dataset concat with genre')
+    parser.add_argument('--size', type=int, default=120000, help='the size will divide equally on all classes')
+    parser.add_argument('--genre_size', type=int, default=60000, help='concated genre dataset size')
 
     # Optimizer
     parser.add_argument('--lr_den', type=float, default=1e-3, help='learning rate of depth estimation')
@@ -61,7 +63,7 @@ set_seed(args.manual_seed)
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 
-from dataset import GenReDataset, R2N2Dataset, collate_func
+from dataset import GenReDataset, R2N2Dataset, ConvexRearrangementDataset, collate_func
 from model import DepthEstimationUNet, DepthDiscriminator
 from utils.render import DepthRenderer
 from utils.visualize import save_depth_result
@@ -80,7 +82,9 @@ def set_path():
 
 
 def train(args):
-    dataset = GenReDataset(args, 'train') if args.dataset == 'genre' else R2N2Dataset(args, 'train')
+    dataset = {'genre': GenReDataset,
+               '3dr2n2': R2N2Dataset,
+               'cvx_rearrange': ConvexRearrangementDataset}[args.dataset](args, 'train')
     print('Load %s training dataset, size =' % args.dataset, len(dataset))
     dataloader = DataLoader(dataset=dataset, batch_size=args.batch_size,
                             num_workers=8, shuffle=True, collate_fn=collate_func)

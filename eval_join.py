@@ -3,6 +3,7 @@ import torch
 import random
 import argparse
 import numpy as np
+from kaolin.rep import TriangleMesh
 from tqdm import tqdm
 from torch.nn import MSELoss
 from torch.utils.data import DataLoader
@@ -23,11 +24,12 @@ def parse_arguments():
     parser.add_argument('--depth_en_path', type=str, default='')
     parser.add_argument('--translate_de_path', type=str, default='')
     parser.add_argument('--volume_rotate_de_path', type=str, default='')
+    parser.add_argument('--deform_de_path', type=str, default='')
     parser.add_argument('--use_symmetry', action='store_true', help='whether use symmetry features fusion')
     parser.add_argument('--use_gt_depth', action='store_true', help='whether use gt depth as network input')
 
     # Dataset Setting
-    parser.add_argument('--unseen', action='store_true', default=True, help='eval on unseen or seen classes')
+    # parser.add_argument('--unseen', action='store_true', default=True, help='eval on unseen or seen classes')
     parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2"')
     parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='the root directory of dataset')
     parser.add_argument('--size', type=int, default=0, help='0 indicates all of the dataset, '
@@ -62,7 +64,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 from dataset import GenReDataset, R2N2Dataset, collate_func, CLASS_DICT
 from model import DepthEstimationUNet
-from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder
+from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformDecoder
 from utils.sampling import Sampling
 from utils.meshing import Meshing
 from utils.loss import ChamferDistanceLoss
@@ -95,14 +97,21 @@ def load_model(args):
     volume_rotate_de = VolumeRotateDecoder(feature_dim=local_feature_dim).cuda()
     volume_rotate_de.load_state_dict(torch.load(volume_rotate_de_path))
 
-    return depth_unet, depth_en, translate_de, volume_rotate_de
+    global_feature_dim = 512
+    deform_de_path = 'checkpoint/deform_de/deform_de_epoch%03d.pth' % args.epoch \
+        if not args.deform_de_path else args.deform_de_path
+    deform_de = DeformDecoder(feature_dim=global_feature_dim+local_feature_dim).cuda()
+    deform_de.load_state_dict(torch.load(deform_de_path))
+
+    return depth_unet, depth_en, translate_de, volume_rotate_de, deform_de
 
 
 def set_path(args):
     output_path = './output/eval/epoch%03d' % args.epoch if not args.output_path else args.output_path
     record_paths = {'loss': os.path.join(output_path, 'loss'),
                     'depth': os.path.join(output_path, 'depth'),
-                    'vp': os.path.join(output_path, 'vp')}
+                    'vp': os.path.join(output_path, 'vp'),
+                    'mesh': os.path.join(output_path, 'mesh')}
     for record_path in list(record_paths.values()):
         os.makedirs(record_path, exist_ok=True)
 
@@ -130,16 +139,17 @@ def eval(args):
 
     vp_num = args.cuboid_num + args.sphere_num
     record_paths = set_path(args)
-    depth_unet, depth_en, translate_de, volume_rotate_de = load_model(args)
+    depth_unet, depth_en, translate_de, volume_rotate_de, deform_de = load_model(args)
 
     depth_unet.eval()
     depth_en.eval()
     translate_de.eval()
     volume_rotate_de.eval()
+    deform_de.eval()
 
     mse_loss_func, cd_loss_func = MSELoss(), ChamferDistanceLoss()
 
-    class_losses = {'depth': {}, 'cd': {}}
+    class_losses = {'depth': {}, 'vp_cd': {}, 'mesh_cd': {}}
     class_n = {}
 
     progress_bar = tqdm(enumerate(dataloader))
@@ -166,20 +176,31 @@ def eval(args):
         translates = translate_de(global_features)
         vp_center_points = torch.cat([t[:, None, :] for t in translates], 1)  # (B, K, 3)
 
-        volumes, rotates = [], []
+        volumes, rotates, deforms = [], [], []
         vp_features = get_vp_features(vp_center_points, input_depths, perceptual_feature_list,  # (B, K, F)
                                       dists, elevs, azims, use_symmetry=args.use_symmetry)
         for i in range(vp_num):
             one_vp_feature = vp_features[:, i, :]  # (B, F)
             volume, rotate = volume_rotate_de(one_vp_feature)
+            deform = deform_de(global_features, one_vp_feature)
+
             volumes.append(volume)
             rotates.append(rotate)
+            deforms.append(deform)
 
-        predict_meshes = Meshing.vp_meshing(volumes, rotates, translates,
-                                            cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
-        predict_points = Sampling.sample_mesh_points(predict_meshes, sample_num=1024)
+        pred_meshes = Meshing.vp_meshing(volumes, rotates, translates,
+                                         cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
+        vp_meshes = [TriangleMesh.from_tensors(m.vertices.clone(), m.faces.clone()) for m in pred_meshes]
+        pred_coarse_points = Sampling.sample_mesh_points(vp_meshes, sample_num=1024)
 
-        cd_loss = cd_loss_func(predict_points, gt_points, each_batch=True)[0]
+        vp_cd_loss = cd_loss_func(pred_coarse_points, gt_points, each_batch=True)[0]
+
+        for i in range(vp_num):
+            for b in range(len(pred_meshes)):
+                pred_meshes[b].vertices[i * 128: (i + 1) * 128, :] += deforms[i][b]
+        pred_fine_points = Sampling.sample_mesh_points(pred_meshes, sample_num=1024)
+
+        mesh_cd_loss = cd_loss_func(pred_fine_points, gt_points, each_batch=True)[0]
 
         batch_size = rgbs.size(0)
         for b in range(batch_size):
@@ -188,23 +209,25 @@ def eval(args):
 
             if class_id in class_losses['depth']:
                 class_losses['depth'][class_id] += depth_loss
-                class_losses['cd'][class_id] += cd_loss[b]
+                class_losses['vp_cd'][class_id] += vp_cd_loss[b]
+                class_losses['mesh_cd'][class_id] += mesh_cd_loss[b]
                 class_n[class_id] += 1
             else:
                 class_losses['depth'][class_id] = depth_loss
-                class_losses['cd'][class_id] = cd_loss[b]
+                class_losses['vp_cd'][class_id] = vp_cd_loss[b]
+                class_losses['mesh_cd'][class_id] = mesh_cd_loss[b]
                 class_n[class_id] = 1
 
         if (idx + 1) % args.record_batch_interval == 0:
             depth_save_path = os.path.join(record_paths['depth'], 'batch%d.png' % (idx + 1))
             vp_save_path = os.path.join(record_paths['vp'], 'batch%d.png' % (idx + 1))
+            mesh_save_path = os.path.join(record_paths['mesh'], 'batch%d.png' % (idx + 1))
 
             save_depth_result(rgbs[0], masks[0], predict_depths[0], gt_depths[0], depth_save_path)
-            save_vp_result(rgbs[0], masks[0], input_depths[0],
-                           predict_meshes[0], gt_meshes[0],
-                           args.cuboid_num + args.sphere_num, vp_save_path)
+            save_vp_result(rgbs[0], masks[0], input_depths[0], vp_meshes[0], gt_meshes[0], vp_num, vp_save_path)
+            save_vp_result(rgbs[0], masks[0], input_depths[0], pred_meshes[0], gt_meshes[0], vp_num, mesh_save_path)
 
-    avg_depth_loss, avg_cd_loss = 0.0, 0.0
+    avg_depth_loss, avg_vp_cd_loss, avg_mesh_cd_loss = 0.0, 0.0, 0.0
 
     print('Depth MSE Loss')
     print('id\t\tloss\t\tname')
@@ -220,19 +243,33 @@ def eval(args):
 
     np.savez(os.path.join(record_paths['loss'], 'depth.npz'), **class_losses['depth'])
 
+    print('VP CD Loss')
+    print('id\t\tloss\t\tname')
+
+    for k in list(class_losses['vp_cd'].keys()):
+        class_losses['vp_cd'][k] = (class_losses['vp_cd'][k] / class_n[k]).item()
+        print('%s\t%.6f\t%s' % (k, class_losses['vp_cd'][k], CLASS_DICT[k]))
+        avg_vp_cd_loss += class_losses['vp_cd'][k]
+
+    avg_vp_cd_loss /= len(list(class_losses['vp_cd'].keys()))
+    print('total mean vp cd loss = %.6f' % avg_vp_cd_loss)
+    class_losses['vp_cd']['total'] = avg_vp_cd_loss
+
+    np.savez(os.path.join(record_paths['loss'], 'vp_cd.npz'), **class_losses['vp_cd'])
+
     print('Mesh CD Loss')
     print('id\t\tloss\t\tname')
 
-    for k in list(class_losses['cd'].keys()):
-        class_losses['cd'][k] = (class_losses['cd'][k] / class_n[k]).item()
-        print('%s\t%.6f\t%s' % (k, class_losses['cd'][k], CLASS_DICT[k]))
-        avg_cd_loss += class_losses['cd'][k]
+    for k in list(class_losses['mesh_cd'].keys()):
+        class_losses['mesh_cd'][k] = (class_losses['mesh_cd'][k] / class_n[k]).item()
+        print('%s\t%.6f\t%s' % (k, class_losses['mesh_cd'][k], CLASS_DICT[k]))
+        avg_mesh_cd_loss += class_losses['mesh_cd'][k]
 
-    avg_cd_loss /= len(list(class_losses['cd'].keys()))
-    print('total mean mesh cd loss = %.6f' % avg_cd_loss)
-    class_losses['cd']['total'] = avg_cd_loss
+    avg_mesh_cd_loss /= len(list(class_losses['mesh_cd'].keys()))
+    print('total mean mesh cd loss = %.6f' % avg_mesh_cd_loss)
+    class_losses['mesh_cd']['total'] = avg_mesh_cd_loss
 
-    np.savez(os.path.join(record_paths['loss'], 'cd.npz'), **class_losses['cd'])
+    np.savez(os.path.join(record_paths['loss'], 'mesh_cd.npz'), **class_losses['mesh_cd'])
 
 
 if __name__ == '__main__':
