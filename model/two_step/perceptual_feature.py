@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 
 def get_local_features(vertices: torch.Tensor, imgs: torch.Tensor, perceptual_features: list):
