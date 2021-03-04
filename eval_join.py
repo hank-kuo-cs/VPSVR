@@ -89,7 +89,7 @@ def load_model(args):
     translate_de = TranslateDecoder(vp_num=args.cuboid_num + args.sphere_num).cuda()
     translate_de.load_state_dict(torch.load(translate_de_path))
 
-    local_feature_dim = 960 * 2 if args.use_symmetry else 960
+    local_feature_dim = 960
 
     volume_rotate_de_path = 'checkpoint/volume_rotate_de/volume_rotate_de_epoch%03d.pth' % args.epoch \
         if not args.volume_rotate_de_path else args.volume_rotate_de_path
