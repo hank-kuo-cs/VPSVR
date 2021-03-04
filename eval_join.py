@@ -20,12 +20,11 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
     parser.add_argument('--epoch', type=int, default=50, help='use which epoch to test,'
                                                               'it will be ignore if below model paths given')
-    parser.add_argument('--depth_unet_path', type=str, default='')
+    parser.add_argument('--depth_unet_path', type=str, default='/home/hank/3d/Experiment/VPSVR/depth/3/VPSVR/checkpoint/den/den_epoch050.pth')
     parser.add_argument('--depth_en_path', type=str, default='')
     parser.add_argument('--translate_de_path', type=str, default='')
     parser.add_argument('--volume_rotate_de_path', type=str, default='')
-    parser.add_argument('--deform_de_path', type=str, default='')
-    parser.add_argument('--use_symmetry', action='store_true', help='whether use symmetry features fusion')
+    parser.add_argument('--deform_gcn_path', type=str, default='')
     parser.add_argument('--use_gt_depth', action='store_true', help='whether use gt depth as network input')
 
     # Dataset Setting
@@ -36,8 +35,8 @@ def parse_arguments():
                                                             'or it will divide equally on all classes')
 
     # Volumetric Primitive
-    parser.add_argument('--sphere_num', type=int, default=8, help='number of spheres')
-    parser.add_argument('--cuboid_num', type=int, default=8, help='number of cuboids')
+    parser.add_argument('--sphere_num', type=int, default=16, help='number of spheres')
+    parser.add_argument('--cuboid_num', type=int, default=0, help='number of cuboids')
 
     # Record Setting
     parser.add_argument('--output_path', type=str, default='')
@@ -64,7 +63,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 from dataset import GenReDataset, R2N2Dataset, collate_func, CLASS_DICT
 from model import DepthEstimationUNet
-from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformDecoder
+from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformGCN
 from utils.sampling import Sampling
 from utils.meshing import Meshing
 from utils.loss import ChamferDistanceLoss
@@ -98,12 +97,12 @@ def load_model(args):
     volume_rotate_de.load_state_dict(torch.load(volume_rotate_de_path))
 
     global_feature_dim = 512
-    deform_de_path = 'checkpoint/deform_de/deform_de_epoch%03d.pth' % args.epoch \
+    deform_gcn_path = 'checkpoint/deform_gcn/deform_gcn_epoch%03d.pth' % args.epoch \
         if not args.deform_de_path else args.deform_de_path
-    deform_de = DeformDecoder(feature_dim=global_feature_dim+local_feature_dim).cuda()
-    deform_de.load_state_dict(torch.load(deform_de_path))
+    deform_gcn = DeformGCN(feature_dim=global_feature_dim+local_feature_dim).cuda()
+    deform_gcn.load_state_dict(torch.load(deform_gcn_path))
 
-    return depth_unet, depth_en, translate_de, volume_rotate_de, deform_de
+    return depth_unet, depth_en, translate_de, volume_rotate_de, deform_gcn
 
 
 def set_path(args):
@@ -118,18 +117,6 @@ def set_path(args):
     return record_paths
 
 
-def get_vp_features(vp_centers: torch.Tensor, imgs: torch.Tensor, perceptual_features_list: list,
-                    dist: torch.Tensor, elev: torch.Tensor, azim: torch.Tensor, use_symmetry: bool):
-    vp_local_features = get_local_features(vp_centers, imgs, perceptual_features_list)
-    if not use_symmetry:
-        return vp_local_features
-
-    symmetric_points = get_symmetrical_points(vp_centers, dist, elev, azim)
-    sym_local_features = get_local_features(symmetric_points, imgs, perceptual_features_list)
-
-    return torch.cat([vp_local_features, sym_local_features], -1)
-
-
 @torch.no_grad()
 def eval(args):
     dataset = GenReDataset(args, 'test') if args.dataset == 'genre' else R2N2Dataset(args, 'test')
@@ -139,13 +126,13 @@ def eval(args):
 
     vp_num = args.cuboid_num + args.sphere_num
     record_paths = set_path(args)
-    depth_unet, depth_en, translate_de, volume_rotate_de, deform_de = load_model(args)
+    depth_unet, depth_en, translate_de, volume_rotate_de, deform_gcn = load_model(args)
 
     depth_unet.eval()
     depth_en.eval()
     translate_de.eval()
     volume_rotate_de.eval()
-    deform_de.eval()
+    deform_gcn.eval()
 
     mse_loss_func, cd_loss_func = MSELoss(), ChamferDistanceLoss()
 
@@ -176,17 +163,15 @@ def eval(args):
         translates = translate_de(global_features)
         vp_center_points = torch.cat([t[:, None, :] for t in translates], 1)  # (B, K, 3)
 
-        volumes, rotates, deforms = [], [], []
-        vp_features = get_vp_features(vp_center_points, input_depths, perceptual_feature_list,  # (B, K, F)
-                                      dists, elevs, azims, use_symmetry=args.use_symmetry)
+        volumes, rotates = [], []
+        vp_features = get_local_features(vp_center_points, input_depths, perceptual_feature_list)  # (B, K, F)
+
         for i in range(vp_num):
             one_vp_feature = vp_features[:, i, :]  # (B, F)
             volume, rotate = volume_rotate_de(one_vp_feature)
-            deform = deform_de(global_features, one_vp_feature)
 
             volumes.append(volume)
             rotates.append(rotate)
-            deforms.append(deform)
 
         pred_meshes = Meshing.vp_meshing(volumes, rotates, translates,
                                          cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
@@ -195,9 +180,10 @@ def eval(args):
 
         vp_cd_loss = cd_loss_func(pred_coarse_points, gt_points, each_batch=True)[0]
 
-        for i in range(vp_num):
-            for b in range(len(pred_meshes)):
-                pred_meshes[b].vertices[i * 128: (i + 1) * 128, :] += deforms[i][b]
+        deformations = deform_gcn(pred_meshes, input_depths, perceptual_feature_list, global_features)
+        for i in range(len(pred_meshes)):
+            pred_meshes[i].vertices += deformations[i]
+
         pred_fine_points = Sampling.sample_mesh_points(pred_meshes, sample_num=1024)
 
         mesh_cd_loss = cd_loss_func(pred_fine_points, gt_points, each_batch=True)[0]
