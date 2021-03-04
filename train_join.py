@@ -320,7 +320,7 @@ def train(args):
 
         print('Epoch %d avg loss: VP CD Loss = %.6f, Part VP CD Loss = %.6f, VP Div Loss = %.6f, '
               'Deform CD Loss = %.6f, Part Deform CD Loss = %.6f, Lap Loss = %.6f, Normal Loss = %.6f\n'
-              % (epoch + 1, avg_losses['vp_cd'], avg_losses['part_cd'], avg_losses['vp_div'],
+              % (epoch + 1, avg_losses['vp_cd'], avg_losses['part_vp_cd'], avg_losses['vp_div'],
                  avg_losses['deform_cd'], avg_losses['part_deform_cd'], avg_losses['lap'], avg_losses['normal']))
 
         # Record some result
