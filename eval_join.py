@@ -98,7 +98,7 @@ def load_model(args):
 
     global_feature_dim = 512
     deform_gcn_path = 'checkpoint/deform_gcn/deform_gcn_epoch%03d.pth' % args.epoch \
-        if not args.deform_de_path else args.deform_de_path
+        if not args.deform_gcn_path else args.deform_gcn_path
     deform_gcn = DeformGCN(feature_dim=global_feature_dim+local_feature_dim).cuda()
     deform_gcn.load_state_dict(torch.load(deform_gcn_path))
 
