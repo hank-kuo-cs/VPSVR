@@ -40,7 +40,7 @@ class ConvexRearrangementDataset(Dataset):
                 'mask': mask,
                 'vertices': vertices,
                 'faces': faces,
-                'dist': dist,
+                'dist': 1,
                 'elev': elev,
                 'azim': azim,
                 'class_id': None}

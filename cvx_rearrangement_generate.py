@@ -128,7 +128,7 @@ def rearrange_two_data(data1, data2, save_dir_path: str):
 
         rgb = to_pil(rgb)
         mask = to_pil(mask)
-        json_data = json.dumps({'dist': dist, 'elev': elev, 'azim': azim})
+        json_data = json.dumps({'dist': 1, 'elev': elev, 'azim': azim})
 
         rgb.save(os.path.join(save_dir_path, '%02d_rgb.png' % j))
         mask.save(os.path.join(save_dir_path, '%02d_mask.png' % j))
