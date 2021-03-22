@@ -32,7 +32,8 @@ class VolumeRotateDecoder(nn.Module):
     def _make_linear(input_dim: int):
         return nn.Sequential(
             nn.Linear(input_dim, 1024),
-            nn.Linear(1024, 1024),
+            nn.LeakyReLU(),
             nn.Linear(1024, 512),
+            nn.LeakyReLU(),
             nn.Linear(512, 7),
         )
