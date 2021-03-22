@@ -287,8 +287,8 @@ def train(args):
             optimizer.step()
 
             progress_bar.set_description(
-                'Depth MSE = %.6f, VP CD = %.6f, Part VP CD = %.6f, VP Div = %.6f, '
-                'Deform CD = %.6f, Part Deform CD = %.6g, Lap = %.6f, Normal = %.6f'
+                'MSE = %.6f, VP = %.6f, Part VP = %.6f, Div = %.6f, '
+                'Deform = %.6f, Part Deform = %.6g, Lap = %.6f, Normal = %.6f'
                 % (depth_mse_loss.item(), vp_cd_loss.item(), part_vp_cd_loss.item(), vp_div_loss.item(),
                    deform_cd_loss.item(), part_deform_cd_loss.item(), lap_loss.item(), normal_loss.item()))
 
