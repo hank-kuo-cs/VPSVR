@@ -53,6 +53,7 @@ def parse_arguments():
     # Volumetric Primitive
     parser.add_argument('--sphere_num', type=int, default=16, help='number of spheres')
     parser.add_argument('--cuboid_num', type=int, default=0, help='number of cuboids')
+    parser.add_argument('--vertex_num', type=int, default=128, help='number of vertices of each primitive')
 
     # Training trick
     parser.add_argument('--dtf_decay', type=float, default=0.8, help='the decay ratio of depth teaching forcing,'
@@ -95,6 +96,7 @@ from utils.visualize import save_depth_result, save_vp_result
 
 
 def load_model(args):
+    vp_num = args.sphere_num + args.cuboid_num
     global_feature_dim, local_feature_dim = 512, 960
 
     depth_ae = DepthEstimationUNet().cuda()
@@ -103,13 +105,13 @@ def load_model(args):
     depth_en = DepthEncoder().cuda()
     depth_en.train()
 
-    translate_de = TranslateDecoder(vp_num=args.cuboid_num + args.sphere_num).cuda()
+    translate_de = TranslateDecoder(vp_num=vp_num).cuda()
     translate_de.train()
 
     volume_rotate_de = VolumeRotateDecoder(feature_dim=local_feature_dim).cuda()
     volume_rotate_de.train()
 
-    deform_gcn = DeformGCN(feature_dim=local_feature_dim+global_feature_dim).cuda()
+    deform_gcn = DeformGCN(feature_dim=local_feature_dim+global_feature_dim, v_num=args.vertex_num * vp_num).cuda()
     deform_gcn.train()
 
     return depth_ae, depth_en, translate_de, volume_rotate_de, deform_gcn
@@ -212,13 +214,13 @@ def train(args):
             gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=2048)
 
             rgbs = rgbs * masks
-            predict_depths = depth_ae(rgbs)
-            predict_depths = predict_depths * masks
+            pred_depths = depth_ae(rgbs)
+            pred_depths = pred_depths * masks
 
-            depth_mse_loss = mse_loss_func(predict_depths, gt_depths) * args.l_depth
+            depth_mse_loss = mse_loss_func(pred_depths, gt_depths) * args.l_depth
 
             # VP Diverse Loss
-            input_depths = predict_depths if torch.rand((1,)).item() > depth_tf else gt_depths
+            input_depths = pred_depths if torch.rand((1,)).item() > depth_tf else gt_depths
             global_features, perceptual_feature_list = depth_en(input_depths)
 
             translates = translate_de(global_features)
@@ -305,13 +307,18 @@ def train(args):
 
             if n % args.record_batch_interval == 0 and (epoch + 1) % 5 == 0:
                 depth_save_path = os.path.join(record_paths['depth'], 'epoch%d-batch%d.png' % (epoch + 1, n))
-                save_depth_result(rgbs[0], masks[0], predict_depths[0], gt_depths[0], depth_save_path)
+                save_depth_result(rgb=rgbs[0], mask=masks[0],
+                                  predict_depth=pred_depths[0], gt_depth=gt_depths[0], save_path=depth_save_path)
 
                 vp_save_path = os.path.join(record_paths['vp'], 'epoch%d-batch%d.png' % (epoch + 1, n))
-                save_vp_result(rgbs[0], masks[0], input_depths[0], vp_meshes[0], gt_meshes[0], vp_num, vp_save_path)
+                save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
+                               predict_mesh=vp_meshes[0], gt_mesh=gt_meshes[0],
+                               vp_num=vp_num, vertex_num=args.vertex_num, save_path=vp_save_path)
 
                 mesh_save_path = os.path.join(record_paths['mesh'], 'epoch%d-batch%d.png' % (epoch + 1, n))
-                save_vp_result(rgbs[0], masks[0], input_depths[0], pred_meshes[0], gt_meshes[0], vp_num, mesh_save_path)
+                save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
+                               predict_mesh=pred_meshes[0], gt_mesh=gt_meshes[0],
+                               vp_num=vp_num, vertex_num=args.vertex_num, save_path=mesh_save_path)
 
         for key in list(avg_losses.keys()):
             avg_losses[key] /= n
@@ -322,7 +329,6 @@ def train(args):
               % (epoch + 1, avg_losses['depth'], avg_losses['vp_cd'], avg_losses['part_vp_cd'], avg_losses['vp_div'],
                  avg_losses['deform_cd'], avg_losses['part_deform_cd'], avg_losses['lap'], avg_losses['normal']))
 
-        # Record some result
         if (epoch+1) % args.checkpoint_epoch_interval == 0:
             model_dict = {'depth_ae': depth_ae.state_dict(),
                           'depth_en': depth_en.state_dict(),

@@ -1,8 +1,7 @@
 import torch
-from PIL import Image
 from kaolin.rep import TriangleMesh
 from .image import concat_images, denormlize_image
-from ..render import VertexRenderer, PhongRenderer, DepthRenderer
+from ..render import VertexRenderer, DepthRenderer
 
 
 COLORS = torch.tensor([[0.0, 0.99, 0.0], [0.0, 0.0, 0.99], [0.99, 0.0, 0.0], [0.6, 0.3, 0.8],
@@ -14,7 +13,7 @@ COLORS = torch.tensor([[0.0, 0.99, 0.0], [0.0, 0.0, 0.99], [0.99, 0.0, 0.0], [0.
 
 def save_vp_result(rgb: torch.Tensor, mask: torch.Tensor, input_depth: torch.Tensor,
                    predict_mesh: TriangleMesh, gt_mesh: TriangleMesh,
-                   vp_num: int, save_path: str):
+                   vp_num: int, vertex_num: int, save_path: str):
     assert rgb.ndimension() == 3  # (3, H, W)
     assert mask.ndimension() == 3  # (3, H, W)
     assert input_depth.ndimension() == 3  # (1, H, W)
@@ -22,7 +21,7 @@ def save_vp_result(rgb: torch.Tensor, mask: torch.Tensor, input_depth: torch.Ten
     rgb = denormlize_image(rgb)
     rgb = rgb * mask
 
-    vp_colors = get_vp_colors(vp_num)
+    vp_colors = get_vp_colors(vp_num, vertex_num)
     gif_imgs = []
 
     for azim in range(0, 360, 30):
@@ -35,12 +34,11 @@ def save_vp_result(rgb: torch.Tensor, mask: torch.Tensor, input_depth: torch.Ten
     gif_imgs[0].save(save_path, format='GIF', append_images=gif_imgs[1:], save_all=True, duration=300, loop=0)
 
 
-def get_vp_colors(vp_num: int):
+def get_vp_colors(vp_num: int, vertex_num=128):
     vp_colors = []
     for i in range(vp_num):
-        one_vp_color = torch.cat([torch.full(size=(128, 1), fill_value=COLORS[i, j].item()) for j in range(3)], dim=1)
+        one_vp_color = torch.cat(
+            [torch.full(size=(vertex_num, 1), fill_value=COLORS[i, j].item()) for j in range(3)], dim=1)
         vp_colors.append(one_vp_color)
 
     return torch.cat(vp_colors)[None].cuda()  # (1, N, 3)
-
-

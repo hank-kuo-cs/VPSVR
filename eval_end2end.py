@@ -36,6 +36,7 @@ def parse_arguments():
     # Volumetric Primitive
     parser.add_argument('--sphere_num', type=int, default=16, help='number of spheres')
     parser.add_argument('--cuboid_num', type=int, default=0, help='number of cuboids')
+    parser.add_argument('--vertex_num', type=int, default=128, help='number of vertices of each primitive')
 
     # Record Setting
     parser.add_argument('--output_path', type=str, default='')
@@ -72,6 +73,7 @@ from utils.visualize import save_depth_result, save_vp_result
 
 
 def load_model(args):
+    vp_num = args.cuboid_num + args.sphere_num
     depth_ae_path = 'checkpoint/depth_ae/depth_ae_epoch%03d.pth' % args.epoch \
         if not args.depth_ae_path else args.depth_ae_path
     depth_ae = DepthEstimationUNet().cuda()
@@ -84,7 +86,7 @@ def load_model(args):
 
     translate_de_path = 'checkpoint/translate_de/translate_de_epoch%03d.pth' % args.epoch \
         if not args.translate_de_path else args.translate_de_path
-    translate_de = TranslateDecoder(vp_num=args.cuboid_num + args.sphere_num).cuda()
+    translate_de = TranslateDecoder(vp_num=vp_num).cuda()
     translate_de.load_state_dict(torch.load(translate_de_path))
 
     local_feature_dim = 960
@@ -97,7 +99,7 @@ def load_model(args):
     global_feature_dim = 512
     deform_gcn_path = 'checkpoint/deform_gcn/deform_gcn_epoch%03d.pth' % args.epoch \
         if not args.deform_gcn_path else args.deform_gcn_path
-    deform_gcn = DeformGCN(feature_dim=global_feature_dim+local_feature_dim).cuda()
+    deform_gcn = DeformGCN(feature_dim=global_feature_dim+local_feature_dim, v_num=args.vertex_num * vp_num).cuda()
     deform_gcn.load_state_dict(torch.load(deform_gcn_path))
 
     return depth_ae, depth_en, translate_de, volume_rotate_de, deform_gcn
@@ -151,10 +153,10 @@ def eval(args):
         gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=1024)
 
         rgbs = rgbs * masks
-        predict_depths = depth_ae(rgbs)
-        predict_depths = predict_depths * masks
+        pred_depths = depth_ae(rgbs)
+        pred_depths = pred_depths * masks
 
-        input_depths = gt_depths if args.use_gt_depth else predict_depths
+        input_depths = gt_depths if args.use_gt_depth else pred_depths
 
         global_features, perceptual_feature_list = depth_en(input_depths)
 
@@ -188,7 +190,7 @@ def eval(args):
 
         batch_size = rgbs.size(0)
         for b in range(batch_size):
-            depth_loss = mse_loss_func(predict_depths[b][None], gt_depths[b][None])
+            depth_loss = mse_loss_func(pred_depths[b][None], gt_depths[b][None])
             class_id = class_ids[b]
 
             if class_id in class_losses['depth']:
@@ -207,9 +209,14 @@ def eval(args):
             vp_save_path = os.path.join(record_paths['vp'], 'batch%d.png' % (idx + 1))
             mesh_save_path = os.path.join(record_paths['mesh'], 'batch%d.png' % (idx + 1))
 
-            save_depth_result(rgbs[0], masks[0], predict_depths[0], gt_depths[0], depth_save_path)
-            save_vp_result(rgbs[0], masks[0], input_depths[0], vp_meshes[0], gt_meshes[0], vp_num, vp_save_path)
-            save_vp_result(rgbs[0], masks[0], input_depths[0], pred_meshes[0], gt_meshes[0], vp_num, mesh_save_path)
+            save_depth_result(rgb=rgbs[0], mask=masks[0],
+                              predict_depth=pred_depths[0], gt_depth=gt_depths[0], save_path=depth_save_path)
+            save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
+                           predict_mesh=vp_meshes[0], gt_mesh=gt_meshes[0],
+                           vp_num=vp_num, vertex_num=args.vertex_num, save_path=vp_save_path)
+            save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
+                           predict_mesh=pred_meshes[0], gt_mesh=gt_meshes[0],
+                           vp_num=vp_num, vertex_num=args.vertex_num, save_path=mesh_save_path)
 
     avg_depth_loss, avg_vp_cd_loss, avg_mesh_cd_loss = 0.0, 0.0, 0.0
 
