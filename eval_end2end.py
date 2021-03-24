@@ -24,7 +24,7 @@ def parse_arguments():
     parser.add_argument('--depth_en_path', type=str, default='')
     parser.add_argument('--translate_de_path', type=str, default='')
     parser.add_argument('--volume_rotate_de_path', type=str, default='')
-    parser.add_argument('--deform_gcn_path', type=str, default='')
+    parser.add_argument('--deform_de_path', type=str, default='')
     parser.add_argument('--use_gt_depth', action='store_true', help='whether use gt depth as network input')
 
     # Dataset Setting
@@ -97,10 +97,10 @@ def load_model(args):
     volume_rotate_de.load_state_dict(torch.load(volume_rotate_de_path))
 
     global_feature_dim = 512
-    deform_gcn_path = 'checkpoint/deform_de/deform_de_epoch%03d.pth' % args.epoch \
-        if not args.deform_gcn_path else args.deform_gcn_path
+    deform_de_path = 'checkpoint/deform_de/deform_de_epoch%03d.pth' % args.epoch \
+        if not args.deform_de_path else args.deform_de_path
     deform_de = DeformDecoder(feature_dim=global_feature_dim+local_feature_dim, vertex_num=args.vertex_num).cuda()
-    deform_de.load_state_dict(torch.load(deform_gcn_path))
+    deform_de.load_state_dict(torch.load(deform_de_path))
 
     return depth_ae, depth_en, translate_de, volume_rotate_de, deform_de
 
