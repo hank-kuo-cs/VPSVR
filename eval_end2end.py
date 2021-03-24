@@ -97,7 +97,7 @@ def load_model(args):
     volume_rotate_de.load_state_dict(torch.load(volume_rotate_de_path))
 
     global_feature_dim = 512
-    deform_gcn_path = 'checkpoint/deform_de/deform_gcn_epoch%03d.pth' % args.epoch \
+    deform_gcn_path = 'checkpoint/deform_de/deform_de_epoch%03d.pth' % args.epoch \
         if not args.deform_gcn_path else args.deform_gcn_path
     deform_de = DeformDecoder(feature_dim=global_feature_dim+local_feature_dim, vertex_num=args.vertex_num).cuda()
     deform_de.load_state_dict(torch.load(deform_gcn_path))
