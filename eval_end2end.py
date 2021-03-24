@@ -63,7 +63,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 from dataset import GenReDataset, R2N2Dataset, collate_func, CLASS_DICT
 from model import DepthEstimationUNet
-from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformGCN
+from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformDecoder
 from utils.sampling import Sampling
 from utils.meshing import Meshing
 from utils.loss import ChamferDistanceLoss
@@ -97,12 +97,12 @@ def load_model(args):
     volume_rotate_de.load_state_dict(torch.load(volume_rotate_de_path))
 
     global_feature_dim = 512
-    deform_gcn_path = 'checkpoint/deform_gcn/deform_gcn_epoch%03d.pth' % args.epoch \
+    deform_gcn_path = 'checkpoint/deform_de/deform_gcn_epoch%03d.pth' % args.epoch \
         if not args.deform_gcn_path else args.deform_gcn_path
-    deform_gcn = DeformGCN(feature_dim=global_feature_dim+local_feature_dim, v_num=args.vertex_num * vp_num).cuda()
-    deform_gcn.load_state_dict(torch.load(deform_gcn_path))
+    deform_de = DeformDecoder(feature_dim=global_feature_dim+local_feature_dim, vertex_num=args.vertex_num).cuda()
+    deform_de.load_state_dict(torch.load(deform_gcn_path))
 
-    return depth_ae, depth_en, translate_de, volume_rotate_de, deform_gcn
+    return depth_ae, depth_en, translate_de, volume_rotate_de, deform_de
 
 
 def set_path(args):
@@ -126,13 +126,13 @@ def eval(args):
 
     vp_num = args.cuboid_num + args.sphere_num
     record_paths = set_path(args)
-    depth_ae, depth_en, translate_de, volume_rotate_de, deform_gcn = load_model(args)
+    depth_ae, depth_en, translate_de, volume_rotate_de, deform_de = load_model(args)
 
     depth_ae.eval()
     depth_en.eval()
     translate_de.eval()
     volume_rotate_de.eval()
-    deform_gcn.eval()
+    deform_de.eval()
 
     mse_loss_func, cd_loss_func = MSELoss(), ChamferDistanceLoss()
 
@@ -146,7 +146,7 @@ def eval(args):
         class_ids = data['class_id']
         vertices = [one_vertices.cuda() for one_vertices in data['vertices']]  # list((N1, 3), ..., (Nb, 3))
         faces = [one_faces.cuda() for one_faces in data['faces']]
-        dists, elevs, azims = data['dist'].cuda(), data['elev'].cuda(), data['azim'].cuda()
+        # dists, elevs, azims = data['dist'].cuda(), data['elev'].cuda(), data['azim'].cuda()
 
         gt_depths = DepthRenderer.render_depths_of_multi_meshes(vertices, faces, normalize=True)
         gt_meshes = Meshing.meshing_vertices_faces(vertices, faces)
@@ -163,15 +163,17 @@ def eval(args):
         translates = translate_de(global_features)
         vp_center_points = torch.cat([t[:, None, :] for t in translates], 1)  # (B, K, 3)
 
-        volumes, rotates = [], []
+        volumes, rotates, deforms = [], [], []
         vp_features = get_local_features(vp_center_points, input_depths, perceptual_feature_list)  # (B, K, F)
 
         for i in range(vp_num):
             one_vp_feature = vp_features[:, i, :]  # (B, F)
             volume, rotate = volume_rotate_de(one_vp_feature)
+            deform = deform_de(global_features, one_vp_feature)
 
             volumes.append(volume)
             rotates.append(rotate)
+            deforms.append(deform)
 
         pred_meshes = Meshing.vp_meshing(volumes, rotates, translates,
                                          cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
@@ -180,9 +182,9 @@ def eval(args):
 
         vp_cd_loss = cd_loss_func(pred_coarse_points, gt_points, each_batch=True)[0]
 
-        deformations = deform_gcn(pred_meshes, input_depths, perceptual_feature_list, global_features)
-        for i in range(len(pred_meshes)):
-            pred_meshes[i].vertices += deformations[i]
+        for i in range(vp_num):
+            for b in range(len(pred_meshes)):
+                pred_meshes[b].vertices[i * args.vertex_num: (i + 1) * args.vertex_num, :] += deforms[i][b]
 
         pred_fine_points = Sampling.sample_mesh_points(pred_meshes, sample_num=1024)
 
