@@ -18,8 +18,8 @@ def parse_arguments():
     parser.add_argument('--manual_seed', type=int, default=0, help='manual seed for randomness')
 
     # Training Setting
-    parser.add_argument('--batch_size', type=int, default=16, help='batch size')
-    parser.add_argument('--epochs', type=int, default=50, help='training epoch num')
+    parser.add_argument('--batch_size', type=int, default=8, help='batch size')
+    parser.add_argument('--epochs', type=int, default=30, help='training epoch num')
 
     # Dataset Setting
     parser.add_argument('--dataset', type=str, default='cvx_rearrange', help='choose "genre" or "3dr2n2", "cvx_rearrange"')
@@ -286,16 +286,19 @@ def train(args):
             total_loss = depth_mse_loss + vp_recon_loss + mesh_recon_loss
 
             optimizer.zero_grad()
-            total_loss.backward(keep_graph=True)
+            total_loss.backward(retain_graph=True)
             optimizer.step()
 
             for model in optimizer.param_groups[:-1]:
-                for p in model.parameters():
+                for p in model['params']:
                     p.requires_grad = False
 
             pred_vertices = [m.vertices for m in pred_meshes]
             pred_faces = [m.faces for m in pred_meshes]
-            render_depths = DepthRenderer.render_depths_of_multi_meshes(pred_vertices, pred_faces)
+            render_depths = DepthRenderer.render_depths_of_multi_meshes_with_multi_view(
+                pred_vertices, pred_faces, dists=[1., 1.], elevs=[0., 0.], azims=[0., 180])
+            gt_depths = DepthRenderer.render_depths_of_multi_meshes_with_multi_view(
+                vertices, faces, dists=[1., 1.], elevs=[0., 0.], azims=[0., 180])
             depth_consist_loss = mse_loss_func(render_depths, input_depths) * args.l_depth_consist
 
             optimizer.zero_grad()
@@ -303,7 +306,7 @@ def train(args):
             optimizer.step()
 
             for model in optimizer.param_groups[:-1]:
-                for p in model.parameters():
+                for p in model['params']:
                     p.requires_grad = True
 
             progress_bar.set_description(
