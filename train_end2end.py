@@ -47,7 +47,8 @@ def parse_arguments():
     parser.add_argument('--l_deform_cd', type=float, default=1.0, help='lambda of deformed mesh reconstruct cd loss')
     parser.add_argument('--l_part_deform_cd', type=float, default=0.0, help='lambda of part deformed mesh reconstruct cd loss')
     parser.add_argument('--l_lap', type=float, default=0.1, help='lambda of laplacian regularization')
-    parser.add_argument('--l_normal', type=float, default=0.001, help='lambda of normal loss')
+    parser.add_argument('--l_normal', type=float, default=0.0, help='lambda of normal loss')
+    parser.add_argument('--l_depth_consist', type=float, default=1., help='lambda of depth consistency loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
     # Volumetric Primitive
@@ -190,12 +191,14 @@ def train(args):
     normal_loss_func = ChamferNormalLoss()
 
     epoch_train_losses = {'depth': [], 'vp_cd': [], 'vp_div': [], 'part_vp_cd': [],
-                          'deform_cd': [], 'part_deform_cd': [], 'lap': [], 'normal': []}
+                          'deform_cd': [], 'part_deform_cd': [], 'lap': [], 'normal': [],
+                          'depth_consist': []}
 
     for epoch in range(args.epochs):
         n = 0
         avg_losses = {'depth': 0.0, 'vp_cd': 0.0, 'vp_div': 0.0, 'part_vp_cd': 0.0,
-                      'deform_cd': 0.0, 'part_deform_cd': 0.0, 'lap': 0.0, 'normal': 0.0}
+                      'deform_cd': 0.0, 'part_deform_cd': 0.0, 'lap': 0.0, 'normal': 0.0,
+                      'depth_consist': 0.0}
 
         progress_bar = tqdm(dataloader)
 
@@ -205,7 +208,7 @@ def train(args):
             vertices = [one_vertices.cuda() for one_vertices in data['vertices']]  # list((N1, 3), ..., (Nb, 3))
             faces = [one_faces.cuda() for one_faces in data['faces']]  # list((F1, 2), ..., (FB, 2))
 
-            gt_depths = DepthRenderer.render_depths_of_multi_meshes(vertices, faces, normalize=True)
+            gt_depths = DepthRenderer.render_depths_of_multi_meshes(vertices, faces)
             gt_meshes = Meshing.meshing_vertices_faces(vertices, faces)
             gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=2048)
 
@@ -283,14 +286,33 @@ def train(args):
             total_loss = depth_mse_loss + vp_recon_loss + mesh_recon_loss
 
             optimizer.zero_grad()
-            total_loss.backward()
+            total_loss.backward(keep_graph=True)
             optimizer.step()
+
+            for model in optimizer.param_groups[:-1]:
+                for p in model.parameters():
+                    p.requires_grad = False
+
+            pred_vertices = [m.vertices for m in pred_meshes]
+            pred_faces = [m.faces for m in pred_meshes]
+            render_depths = DepthRenderer.render_depths_of_multi_meshes(pred_vertices, pred_faces)
+            depth_consist_loss = mse_loss_func(render_depths, input_depths) * args.l_depth_consist
+
+            optimizer.zero_grad()
+            depth_consist_loss.backward()
+            optimizer.step()
+
+            for model in optimizer.param_groups[:-1]:
+                for p in model.parameters():
+                    p.requires_grad = True
 
             progress_bar.set_description(
                 'MSE = %.6f, VP = %.6f, Part VP = %.6f, Div = %.6f, '
-                'Deform = %.6f, Part Deform = %.6g, Lap = %.6f, Normal = %.6f'
+                'Deform = %.6f, Part Deform = %.6g, Lap = %.6f, Normal = %.6f, '
+                'Depth Consist = %.6f'
                 % (depth_mse_loss.item(), vp_cd_loss.item(), part_vp_cd_loss.item(), vp_div_loss.item(),
-                   deform_cd_loss.item(), part_deform_cd_loss.item(), lap_loss.item(), normal_loss.item()))
+                   deform_cd_loss.item(), part_deform_cd_loss.item(), lap_loss.item(), normal_loss.item(),
+                   depth_consist_loss.item()))
 
             avg_losses['depth'] += depth_mse_loss.item()
             avg_losses['vp_cd'] += vp_cd_loss.item()
@@ -300,6 +322,7 @@ def train(args):
             avg_losses['part_deform_cd'] += part_deform_cd_loss.item()
             avg_losses['lap'] += lap_loss.item()
             avg_losses['normal'] += normal_loss.item()
+            avg_losses['depth_consist'] += depth_consist_loss.item()
             n += 1
 
             if n % args.record_batch_interval == 0 and (epoch + 1) % 5 == 0:
@@ -322,9 +345,10 @@ def train(args):
             epoch_train_losses[key].append(avg_losses[key])
 
         print('Epoch %d avg loss: Depth MSE = %.6f, VP CD = %.6f, Part VP CD = %.6f, VP Div = %.6f, '
-              'Deform CD = %.6f, Part Deform CD = %.6f, Lap = %.6f, Normal = %.6f\n'
+              'Deform CD = %.6f, Part Deform CD = %.6f, Lap = %.6f, Normal = %.6f, Depth Consist = %.6f\n'
               % (epoch + 1, avg_losses['depth'], avg_losses['vp_cd'], avg_losses['part_vp_cd'], avg_losses['vp_div'],
-                 avg_losses['deform_cd'], avg_losses['part_deform_cd'], avg_losses['lap'], avg_losses['normal']))
+                 avg_losses['deform_cd'], avg_losses['part_deform_cd'], avg_losses['lap'], avg_losses['normal'],
+                 avg_losses['depth_consist']))
 
         if (epoch+1) % args.checkpoint_epoch_interval == 0:
             model_dict = {'depth_ae': depth_ae.state_dict(),
