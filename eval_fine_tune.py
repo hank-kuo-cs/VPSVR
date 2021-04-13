@@ -192,13 +192,13 @@ def eval(args):
                 rotates.append(rotate)
 
             vp_meshes = Meshing.vp_meshing(volumes, rotates, translates,
-                                             cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
+                                           cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
 
             pred_coarse_points = Sampling.sample_mesh_points(vp_meshes, sample_num=1024)
 
             vp_cd_loss = cd_loss_func(pred_coarse_points, gt_points, each_batch=True)[0]
 
-        for iter_now in range(len(args.iter_num)):
+        for iter_now in range(args.iter_num):
             deforms = []
             for i in range(vp_num):
                 one_vp_feature = vp_features[:, i, :]  # (B, F)
@@ -229,41 +229,42 @@ def eval(args):
                 depth_consist_loss.backward()
                 optimizer.step()
 
-        batch_size = rgbs.size(0)
-        for b in range(batch_size):
-            depth_loss = mse_loss_func(pred_depths[b][None], gt_depths[b][None])
-            class_id = class_ids[b]
+        with torch.no_grad():
+            batch_size = rgbs.size(0)
+            for b in range(batch_size):
+                depth_loss = mse_loss_func(pred_depths[b][None], gt_depths[b][None])
+                class_id = class_ids[b]
 
-            if class_id in class_losses['depth']:
-                class_losses['depth'][class_id] += depth_loss
-                class_losses['vp_cd'][class_id] += vp_cd_loss[b]
-                class_losses['init_mesh_cd'][class_id] += init_mesh_cd_loss[b]
-                class_losses['ft_mesh_cd'][class_id] += ft_mesh_cd_loss[b]
-                class_n[class_id] += 1
-            else:
-                class_losses['depth'][class_id] = depth_loss
-                class_losses['vp_cd'][class_id] = vp_cd_loss[b]
-                class_losses['init_mesh_cd'][class_id] = init_mesh_cd_loss[b]
-                class_losses['ft_mesh_cd'][class_id] = ft_mesh_cd_loss[b]
-                class_n[class_id] = 1
+                if class_id in class_losses['depth']:
+                    class_losses['depth'][class_id] += depth_loss
+                    class_losses['vp_cd'][class_id] += vp_cd_loss[b]
+                    class_losses['init_mesh_cd'][class_id] += init_mesh_cd_loss[b]
+                    class_losses['ft_mesh_cd'][class_id] += ft_mesh_cd_loss[b]
+                    class_n[class_id] += 1
+                else:
+                    class_losses['depth'][class_id] = depth_loss
+                    class_losses['vp_cd'][class_id] = vp_cd_loss[b]
+                    class_losses['init_mesh_cd'][class_id] = init_mesh_cd_loss[b]
+                    class_losses['ft_mesh_cd'][class_id] = ft_mesh_cd_loss[b]
+                    class_n[class_id] = 1
 
-        if (idx + 1) % args.record_batch_interval == 0:
-            depth_save_path = os.path.join(record_paths['depth'], 'batch%d.png' % (idx + 1))
-            vp_save_path = os.path.join(record_paths['vp'], 'batch%d.png' % (idx + 1))
-            mesh_save_path = os.path.join(record_paths['mesh'], 'batch%d.png' % (idx + 1))
-            ft_save_path = os.path.join(record_paths['ft'], 'batch%d.png' % (idx + 1))
+            if (idx + 1) % args.record_batch_interval == 0:
+                depth_save_path = os.path.join(record_paths['depth'], 'batch%d.png' % (idx + 1))
+                vp_save_path = os.path.join(record_paths['vp'], 'batch%d.png' % (idx + 1))
+                mesh_save_path = os.path.join(record_paths['mesh'], 'batch%d.png' % (idx + 1))
+                ft_save_path = os.path.join(record_paths['ft'], 'batch%d.png' % (idx + 1))
 
-            save_depth_result(rgb=rgbs[0], mask=masks[0],
-                              predict_depth=pred_depths[0], gt_depth=gt_depths[0], save_path=depth_save_path)
-            save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
-                           predict_mesh=vp_meshes[0], gt_mesh=gt_meshes[0],
-                           vp_num=vp_num, vertex_num=args.vertex_num, save_path=vp_save_path)
-            save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
-                           predict_mesh=pred_init_meshes[0], gt_mesh=gt_meshes[0],
-                           vp_num=vp_num, vertex_num=args.vertex_num, save_path=mesh_save_path)
-            save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
-                           predict_mesh=pred_meshes[0], gt_mesh=gt_meshes[0],
-                           vp_num=vp_num, vertex_num=args.vertex_num, save_path=ft_save_path)
+                save_depth_result(rgb=rgbs[0], mask=masks[0],
+                                  predict_depth=pred_depths[0], gt_depth=gt_depths[0], save_path=depth_save_path)
+                save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
+                               predict_mesh=vp_meshes[0], gt_mesh=gt_meshes[0],
+                               vp_num=vp_num, vertex_num=args.vertex_num, save_path=vp_save_path)
+                save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
+                               predict_mesh=pred_init_meshes[0], gt_mesh=gt_meshes[0],
+                               vp_num=vp_num, vertex_num=args.vertex_num, save_path=mesh_save_path)
+                save_vp_result(rgb=rgbs[0], mask=masks[0], input_depth=input_depths[0],
+                               predict_mesh=pred_meshes[0], gt_mesh=gt_meshes[0],
+                               vp_num=vp_num, vertex_num=args.vertex_num, save_path=ft_save_path)
 
     avg_losses = {'depth': 0.0, 'vp_cd': 0.0, 'init_mesh_cd': 0.0, 'ft_mesh_cd': 0.0}
     headlines = {'depth': 'Depth MSE Loss', 'vp_cd': 'VP CD Loss',
