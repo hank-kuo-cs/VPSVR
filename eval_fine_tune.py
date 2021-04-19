@@ -37,9 +37,11 @@ def parse_arguments():
     parser.add_argument('--lr', type=float, default=1e-5, help='lr of optimizer')
     parser.add_argument('--iter_num', type=int, default=20, help='number of iterations')
     parser.add_argument('--l_depth_consist', type=float, default=1.0, help='lambda of depth consistency loss')
+    parser.add_argument('--l_sobel_consist', type=float, default=1.0, help='lambda of sobel consistency loss')
     parser.add_argument('--beta1', type=float, default=0.5, help='beta1 of Adam optimizer')
     parser.add_argument('--beta2', type=float, default=0.9, help='beta2 of Adam optimizer')
     parser.add_argument('--w_decay', type=float, default=0.0, help='weight decay of Adam optimizer')
+    parser.add_argument('--sobel', action='store_true', help='use sobel consistency loss to fine tune')
 
     # Volumetric Primitive
     parser.add_argument('--sphere_num', type=int, default=16, help='number of spheres')
@@ -74,7 +76,7 @@ from model import DepthEstimationUNet
 from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformDecoder
 from utils.sampling import Sampling
 from utils.meshing import Meshing
-from utils.loss import ChamferDistanceLoss
+from utils.loss import ChamferDistanceLoss, SobelConsistencyLoss
 from utils.render import DepthRenderer
 from utils.perceptual import get_local_features
 from utils.visualize import save_depth_result, save_vp_result
@@ -147,7 +149,7 @@ def eval(args):
     translate_de.eval()
     volume_rotate_de.eval()
 
-    mse_loss_func, cd_loss_func = MSELoss(), ChamferDistanceLoss()
+    mse_loss_func, cd_loss_func, sobel_loss_func = MSELoss(), ChamferDistanceLoss(), SobelConsistencyLoss()
 
     class_losses = {'depth': {}, 'vp_cd': {}, 'init_mesh_cd': {}, 'ft_mesh_cd': {}}
     class_n = {}
@@ -224,9 +226,13 @@ def eval(args):
                 pred_faces = [m.faces for m in pred_meshes]
                 render_depths = DepthRenderer.render_depths_of_multi_meshes(pred_vertices, pred_faces)
 
-                depth_consist_loss = mse_loss_func(render_depths, pred_depths) * args.l_depth_consist
+                if args.sobel:
+                    loss = sobel_loss_func(render_depths, pred_depths) * args.l_sobel_consist
+                else:
+                    loss = mse_loss_func(render_depths, pred_depths) * args.l_depth_consist
+
                 optimizer.zero_grad()
-                depth_consist_loss.backward()
+                loss.backward()
                 optimizer.step()
 
         with torch.no_grad():
