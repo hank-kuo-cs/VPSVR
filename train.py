@@ -57,7 +57,7 @@ def parse_arguments():
     parser.add_argument('--vertex_num', type=int, default=128, help='number of vertices of each primitive')
 
     # Training trick
-    parser.add_argument('--dtf_decay', type=float, default=0.8, help='the decay ratio of depth teaching forcing,'
+    parser.add_argument('--dtf_decay', type=float, default=0.9, help='the decay ratio of depth teaching forcing,'
                                                                      'it will be applied every 5 epochs')
 
     # Record Setting
@@ -183,7 +183,7 @@ def train(args):
         {'params': translate_de.parameters(), 'lr': args.lr_translate_de},
         {'params': volume_rotate_de.parameters(), 'lr': args.lr_volume_rotate_de},
         {'params': deform_de.parameters(), 'lr': args.lr_deform_de}
-    ], betas=(args.beta1, args.beta2))
+    ], betas=(args.beta1, args.beta2), weight_decay=args.w_decay)
 
     mse_loss_func = MSELoss()
     cd_loss_func = ChamferDistanceLoss()
@@ -352,7 +352,7 @@ def train(args):
                 model_path = os.path.join(checkpoint_paths[network_name], '%s_epoch%03d.pth' % (network_name, epoch+1))
                 torch.save(model_weight, model_path)
 
-        depth_tf *= args.dtf_decay if not (epoch + 1) % 5 else 1.0
+        depth_tf *= args.dtf_decay
 
     for key in list(epoch_train_losses.keys()):
         np.save(os.path.join(record_paths['loss'], key + '.npy'), np.array(epoch_train_losses[key]))
