@@ -19,13 +19,13 @@ def parse_arguments():
 
     # Training Setting
     parser.add_argument('--batch_size', type=int, default=8, help='batch size')
-    parser.add_argument('--epochs', type=int, default=30, help='training epoch num')
+    parser.add_argument('--epochs', type=int, default=20, help='training epoch num')
 
     # Dataset Setting
     parser.add_argument('--dataset', type=str, default='cvx_rearrange', help='choose "genre" or "3dr2n2", "cvx_rearrange"')
-    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/CvxRearrangement', help='root directory of dataset')
+    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/CvxRearrangement_2', help='root directory of dataset')
     parser.add_argument('--genre_root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of genre')
-    parser.add_argument('--cvx_add_genre', action='store_true', default=True, help='cvx rearrangement dataset concat with genre')
+    parser.add_argument('--cvx_add_genre', action='store_true', help='cvx rearrangement dataset concat with genre')
     parser.add_argument('--size', type=int, default=120000, help='the size will divide equally on all classes')
     parser.add_argument('--genre_size', type=int, default=60000, help='concated genre dataset size')
 
@@ -48,7 +48,7 @@ def parse_arguments():
     parser.add_argument('--l_part_deform_cd', type=float, default=0.0, help='lambda of part deformed mesh reconstruct cd loss')
     parser.add_argument('--l_lap', type=float, default=0.1, help='lambda of laplacian regularization')
     parser.add_argument('--l_normal', type=float, default=0.0, help='lambda of normal loss')
-    parser.add_argument('--l_sobel', type=float, default=0.1, help='lambda of sobel regularization loss')
+    parser.add_argument('--l_sobel', type=float, default=0.01, help='lambda of sobel regularization loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
     # Volumetric Primitive
