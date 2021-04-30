@@ -63,8 +63,8 @@ def parse_arguments():
     # Record Setting
     parser.add_argument('--output_path', type=str, default='./output/train')
     parser.add_argument('--checkpoint_path', type=str, default='./checkpoint')
-    parser.add_argument('--record_batch_interval', type=int, default=100, help='record prediction result every N batch')
-    parser.add_argument('--checkpoint_epoch_interval', type=int, default=10, help='record model checkpoint every N epoch')
+    parser.add_argument('--record_batch_interval', type=int, default=200, help='record prediction result every N batch')
+    parser.add_argument('--checkpoint_epoch_interval', type=int, default=5, help='record model checkpoint every N epoch')
 
     return parser.parse_args()
 
