@@ -7,7 +7,9 @@ class DeformDecoder(nn.Module):
         super().__init__()
         self.vertex_num = vertex_num
         self.fc = nn.Sequential(
-            nn.Linear(feature_dim, 1024),
+            nn.Linear(feature_dim + vertex_num * 3, 2048),
+            nn.LeakyReLU(),
+            nn.Linear(2048, 1024),
             nn.LeakyReLU(),
             nn.Linear(1024, 512),
             nn.LeakyReLU(),
@@ -15,8 +17,8 @@ class DeformDecoder(nn.Module):
             nn.Tanh()
         )
 
-    def forward(self, global_features, local_features):
-        features = torch.cat([global_features, local_features], 1)
+    def forward(self, vertices: torch.Tensor, global_features: torch.Tensor, local_features: torch.Tensor):
+        features = torch.cat([vertices.view(vertices.size(0), -1), global_features, local_features], 1)
         out = self.fc(features)
         deform = out.view(-1, self.vertex_num, 3) * 0.1
         return deform

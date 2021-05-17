@@ -231,17 +231,15 @@ def train(args):
             vp_div_loss *= args.l_vpdiv
 
             # CD loss
-            volumes, rotates, deforms = [], [], []
+            volumes, rotates = [], []
             vp_features = get_local_features(vp_centers, input_depths, perceptual_feature_list)
 
             for i in range(vp_num):
                 one_vp_feature = vp_features[:, i, :]  # (B, F)
                 volume, rotate = volume_rotate_de(one_vp_feature)
-                deform = deform_de(global_features, one_vp_feature)
 
                 volumes.append(volume)
                 rotates.append(rotate)
-                deforms.append(deform)
 
             pred_coarse_points = Sampling.sample_vp_points(volumes, rotates, translates,
                                                            cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
@@ -263,6 +261,11 @@ def train(args):
             pred_meshes = Meshing.vp_meshing(volumes, rotates, translates,
                                              cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
             vp_meshes = [TriangleMesh.from_tensors(m.vertices.clone(), m.faces.clone()) for m in pred_meshes]
+
+            deforms = []
+            for i in range(vp_num):
+                one_vp_feature = vp_features[:, i, :]  # (B, F)
+                deforms.append(deform_de(pred_meshes[i].vertices, global_features, one_vp_feature))
 
             for i in range(vp_num):
                 for b in range(len(pred_meshes)):
