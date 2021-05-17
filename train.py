@@ -265,7 +265,8 @@ def train(args):
             deforms = []
             for i in range(vp_num):
                 one_vp_feature = vp_features[:, i, :]  # (B, F)
-                deforms.append(deform_de(pred_meshes[i].vertices, global_features, one_vp_feature))
+                input_vertices = torch.cat([m.vertices[i * args.vertex_num: (i + 1) * args.vertex_num, :][None] for m in pred_meshes])
+                deforms.append(deform_de(input_vertices, global_features, one_vp_feature))
 
             for i in range(vp_num):
                 for b in range(len(pred_meshes)):
