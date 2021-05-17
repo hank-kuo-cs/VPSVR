@@ -42,5 +42,5 @@ class DeformGlobalDecoder(nn.Module):
     def forward(self, vertices: torch.Tensor, global_features: torch.Tensor):
         features = torch.cat([vertices.view(vertices.size(0), -1), global_features], 1)
         out = self.fc(features)
-        deform = out.view(-1, self.vertex_num, 3) * 0.1
+        deform = out.view(-1, self.vertex_num * 16, 3) * 0.1
         return deform
