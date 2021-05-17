@@ -22,11 +22,11 @@ def parse_arguments():
     parser.add_argument('--epochs', type=int, default=20, help='training epoch num')
 
     # Dataset Setting
-    parser.add_argument('--dataset', type=str, default='cvx_rearrange', help='choose "genre" or "3dr2n2", "cvx_rearrange"')
-    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/CvxRearrangement', help='root directory of dataset')
+    parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2", "cvx_rearrange"')
+    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of dataset')
     parser.add_argument('--genre_root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of genre')
-    parser.add_argument('--cvx_add_genre', action='store_true', default=True, help='cvx rearrangement dataset concat with genre')
-    parser.add_argument('--size', type=int, default=120000, help='the size will divide equally on all classes')
+    parser.add_argument('--cvx_add_genre', action='store_true', default=False, help='cvx rearrangement dataset concat with genre')
+    parser.add_argument('--size', type=int, default=6000, help='the size will divide equally on all classes')
     parser.add_argument('--genre_size', type=int, default=60000, help='concated genre dataset size')
 
     # Optimizer
@@ -43,12 +43,12 @@ def parse_arguments():
     parser.add_argument('--l_depth', type=float, default=1.0, help='lambda of depth mse loss')
     parser.add_argument('--l_vpdiv', type=float, default=0.5, help='lambda of vp diverse loss')
     parser.add_argument('--l_vp_cd', type=float, default=1.0, help='lambda of global vp reconstruct cd loss')
-    parser.add_argument('--l_part_cd', type=float, default=1.0, help='lambda of part vp reconstruct cd loss')
+    parser.add_argument('--l_part_cd', type=float, default=0.0, help='lambda of part vp reconstruct cd loss')
     parser.add_argument('--l_deform_cd', type=float, default=1.0, help='lambda of deformed mesh reconstruct cd loss')
     parser.add_argument('--l_part_deform_cd', type=float, default=0.0, help='lambda of part deformed mesh reconstruct cd loss')
     parser.add_argument('--l_lap', type=float, default=0.1, help='lambda of laplacian regularization')
     parser.add_argument('--l_normal', type=float, default=0.0, help='lambda of normal loss')
-    parser.add_argument('--l_sobel', type=float, default=0.01, help='lambda of sobel regularization loss')
+    parser.add_argument('--l_sobel', type=float, default=0.0, help='lambda of sobel regularization loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
 
     # Volumetric Primitive
@@ -291,7 +291,7 @@ def train(args):
             pred_depths = DepthRenderer.render_depths_of_multi_meshes_with_multi_view(
                 pred_vertices, pred_faces, dists=dists, elevs=elevs, azims=azims)
 
-            sobel_loss = sobel_loss_func(pred_depths) * args.l_sobel
+            sobel_loss = sobel_loss_func(pred_depths) * args.l_sobel if args.l_sobel > 0 else torch.tensor(0.0).cuda()
 
             vp_recon_loss = vp_div_loss + vp_cd_loss + part_vp_cd_loss
             mesh_recon_loss = deform_cd_loss + part_deform_cd_loss + lap_loss + normal_loss + sobel_loss
