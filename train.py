@@ -87,7 +87,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 from dataset import GenReDataset, R2N2Dataset, ConvexRearrangementDataset, collate_func
 from model import DepthEstimationUNet
-from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformDecoder
+from model.two_step import DepthEncoder, TranslateDecoder, VolumeRotateDecoder, DeformDecoder, DeformGlobalDecoder
 from utils.sampling import Sampling
 from utils.meshing import Meshing
 from utils.loss import ChamferDistanceLoss, ChamferNormalLoss, LaplacianRegularization, SobelRegularization
@@ -112,7 +112,10 @@ def load_model(args):
     volume_rotate_de = VolumeRotateDecoder(feature_dim=local_feature_dim).cuda()
     volume_rotate_de.train()
 
-    deform_de = DeformDecoder(feature_dim=local_feature_dim+global_feature_dim, vertex_num=args.vertex_num).cuda()
+    # deform_de = DeformDecoder(feature_dim=local_feature_dim+global_feature_dim, vertex_num=args.vertex_num).cuda()
+    # deform_de.train()
+
+    deform_de = DeformGlobalDecoder(feature_dim=global_feature_dim, vertex_num=args.vertex_num).cuda()
     deform_de.train()
 
     return depth_ae, depth_en, translate_de, volume_rotate_de, deform_de
@@ -262,15 +265,21 @@ def train(args):
                                              cuboid_num=args.cuboid_num, sphere_num=args.sphere_num)
             vp_meshes = [TriangleMesh.from_tensors(m.vertices.clone(), m.faces.clone()) for m in pred_meshes]
 
-            deforms = []
-            for i in range(vp_num):
-                one_vp_feature = vp_features[:, i, :]  # (B, F)
-                input_vertices = torch.cat([m.vertices[i * args.vertex_num: (i + 1) * args.vertex_num, :][None] for m in pred_meshes])
-                deforms.append(deform_de(input_vertices, global_features, one_vp_feature))
+            input_vertices = torch.cat([m.vertices[None] for m in pred_meshes])
+            deform = deform_de(input_vertices, global_features)
 
-            for i in range(vp_num):
-                for b in range(len(pred_meshes)):
-                    pred_meshes[b].vertices[i * args.vertex_num: (i + 1) * args.vertex_num, :] += deforms[i][b]
+            for b in range(len(pred_meshes)):
+                pred_meshes[b].vertices = deform[b]
+
+            # deforms = []
+            # for i in range(vp_num):
+            #     one_vp_feature = vp_features[:, i, :]  # (B, F)
+            #     input_vertices = torch.cat([m.vertices[i * args.vertex_num: (i + 1) * args.vertex_num, :][None] for m in pred_meshes])
+            #     deforms.append(deform_de(input_vertices, global_features, one_vp_feature))
+
+            # for i in range(vp_num):
+            #     for b in range(len(pred_meshes)):
+            #         pred_meshes[b].vertices[i * args.vertex_num: (i + 1) * args.vertex_num, :] += deforms[i][b]
 
             pred_fine_points = torch.cat([m.sample(2048)[0][None] for m in pred_meshes])
             deform_cd_loss, _, _ = cd_loss_func(pred_fine_points, gt_points)
