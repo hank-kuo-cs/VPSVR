@@ -1,45 +1,33 @@
 import torch
 import torch.nn as nn
 from kaolin.rep import TriangleMesh
-from torch_geometric.nn import GCNConv
-from .perceptual_feature import get_local_features
+from ..perceptual_feature import get_local_features
+from .bottleneck import GBottleneck, GCNConv
 
 
 class DeformGCN(nn.Module):
-    def __init__(self, n_dim=3, feature_dim=960 + 512, v_num=2048):
+    def __init__(self, edges: torch.Tensor, n_dim=3, feature_dim=960 + 512, v_num=2048):
         super().__init__()
-        conv = GCNConv
-        self.relu = nn.LeakyReLU()
 
-        self.encoder = nn.ModuleList([
-            conv(n_dim + feature_dim, 512),
-            conv(512, 512),
-            conv(512, 256),
-            conv(256, 256),
-            conv(256, 64),
-            conv(64, 3),
+        self.edges = edges
+        self.blocks = nn.ModuleList([
+            GBottleneck(in_dim=n_dim + feature_dim, hidden_dim=256, out_dim=256, edges=edges),
+            GBottleneck(in_dim=256, hidden_dim=256, out_dim=256, edges=edges),
+            GBottleneck(in_dim=256, hidden_dim=256, out_dim=256, edges=edges),
         ])
-
-        self.decoder = nn.Sequential(
-            nn.Linear(v_num * 3, v_num * 3),
-            nn.Tanh()
-        )
+        self.last_conv = GCNConv(256, 3)
 
     def forward(self, meshes: list, imgs: torch.Tensor, perceptual_features: list, global_features: torch.Tensor):
-        B = len(meshes)
         N = len(meshes[0].vertices)
 
         batch_vertices = self.get_batch_vertices(meshes)  # (B, N, 3)
-        edges = self.get_edges(meshes[0])  # (2, K)
 
         global_features = global_features[:, None, :].repeat(1, N, 1)
         local_features = get_local_features(batch_vertices, imgs, perceptual_features)
 
         x = torch.cat([batch_vertices, local_features, global_features], 2)
 
-        features = self.extract_features(x, edges).view(B, -1)
-
-        deformations = self.decoder(features).view(B, -1, 3) * 0.1
+        deformations = self.regress(x)
 
         return deformations
 
@@ -61,10 +49,9 @@ class DeformGCN(nn.Module):
     def get_batch_vertices(meshes: list):
         return torch.cat([mesh.vertices[None] for mesh in meshes])
 
-    def extract_features(self, x, edges):
-        for i, conv in enumerate(self.encoder):
-            x = conv(x, edges, None)
-            if i % 2:
-                x = self.relu(x)
+    def regress(self, x):
+        for block in self.blocks:
+            x, x_hidden = block(x)
+            x = torch.cat([x, x_hidden], 1)
+        x = self.last_conv(x)
         return x
-    
