@@ -27,6 +27,8 @@ class DepthEstimationUNet(nn.Module):
         self.decoder = nn.ModuleList(
             [rev_resnet.layer1, rev_resnet.layer2, rev_resnet.layer3, rev_resnet.layer4, final_deconv])
 
+        self._initialize_weights()
+
     def forward(self, x):
         feature_maps = self.encode(x)
         pred_depth = self.decode(feature_maps)
@@ -50,6 +52,19 @@ class DepthEstimationUNet(nn.Module):
 
         pred_depth = torch.clamp(x, min=0.0, max=1.0)
         return pred_depth
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
 
 
 class RevBasicBlock(nn.Module):

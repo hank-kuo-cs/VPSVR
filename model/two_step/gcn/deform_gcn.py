@@ -67,3 +67,4 @@ class DeformGCN(nn.Module):
             if i % 2:
                 x = self.relu(x)
         return x
+    
