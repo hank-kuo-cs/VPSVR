@@ -6,36 +6,36 @@ from .bottleneck import GBottleneck, GCNConv
 
 
 class DeformGCN(nn.Module):
-    def __init__(self, edges: torch.Tensor, n_dim=3, feature_dim=960 + 512, v_num=2048):
+    def __init__(self, n_dim=3, feature_dim=960 + 128, v_num=2048):
         super().__init__()
-
-        self.edges = edges
-        self.blocks = nn.ModuleList([
-            GBottleneck(in_dim=n_dim + feature_dim, hidden_dim=256, out_dim=256, edges=edges),
-            GBottleneck(in_dim=256, hidden_dim=256, out_dim=256, edges=edges),
-            GBottleneck(in_dim=256, hidden_dim=256, out_dim=256, edges=edges),
+        self.v_num = v_num
+        self.gcn = nn.ModuleList([
+            GBottleneck(in_dim=n_dim + feature_dim, hidden_dim=256, out_dim=64),
+            GCNConv(64, 3)
         ])
-        self.last_conv = GCNConv(256, 3)
+        self.global_split_fc = nn.Linear(512, 128 * v_num)
 
     def forward(self, meshes: list, imgs: torch.Tensor, perceptual_features: list, global_features: torch.Tensor):
-        N = len(meshes[0].vertices)
+        B = len(meshes)
 
         batch_vertices = self.get_batch_vertices(meshes)  # (B, N, 3)
+        edges = self.get_edges(meshes[0])
 
-        global_features = global_features[:, None, :].repeat(1, N, 1)
+        global_features = self.global_split_fc(global_features).view(B, self.v_num, 128)
         local_features = get_local_features(batch_vertices, imgs, perceptual_features)
 
-        x = torch.cat([batch_vertices, local_features, global_features], 2)
+        x = torch.cat([batch_vertices, global_features, local_features], 2)  # (B, N, 3+128+960)
 
-        deformations = self.regress(x)
+        for conv in self.gcn:
+            x = conv(x, edges)
 
-        return deformations
+        return x  # (B, N, 3)
 
     @staticmethod
     def get_edges(mesh: TriangleMesh):
         vertices, faces = mesh.vertices, mesh.faces
 
-        face_size= faces.shape[1]
+        face_size = faces.shape[1]
         edges = torch.cat([faces[:, i:i + 2] for i in range(face_size - 1)] +
                           [faces[:, [-1, 0]]], dim=0)
 
@@ -48,10 +48,3 @@ class DeformGCN(nn.Module):
     @staticmethod
     def get_batch_vertices(meshes: list):
         return torch.cat([mesh.vertices[None] for mesh in meshes])
-
-    def regress(self, x):
-        for block in self.blocks:
-            x, x_hidden = block(x)
-            x = torch.cat([x, x_hidden], 1)
-        x = self.last_conv(x)
-        return x

@@ -6,7 +6,7 @@ sigmoid = nn.Sigmoid()
 
 
 class VolumeRotateDecoder(nn.Module):
-    def __init__(self, feature_dim: int, volume_eps=0.1, volume_restrict=None):
+    def __init__(self, feature_dim: int = 960, volume_eps=0.1, volume_restrict=None):
         super().__init__()
         self.volume_eps = volume_eps
         self.feature_dim = feature_dim
