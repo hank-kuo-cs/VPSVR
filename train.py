@@ -51,6 +51,7 @@ def parse_arguments():
     parser.add_argument('--l_sobel', type=float, default=0.0, help='lambda of sobel regularization loss')
     parser.add_argument('--l_vp_center', type=float, default=0.0, help='lambda of vp center loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
+    parser.add_argument('--gt_sample_num', type=int, default=4096, help='number of gt sample points')
 
     # Volumetric Primitive
     parser.add_argument('--sphere_num', type=int, default=16, help='number of spheres')
@@ -213,7 +214,7 @@ def train(args):
 
             gt_depths = DepthRenderer.render_depths_of_multi_meshes(vertices, faces)
             gt_meshes = Meshing.meshing_vertices_faces(vertices, faces)
-            gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=8192)
+            gt_points = Sampling.sample_mesh_points(gt_meshes, sample_num=args.gt_sample_num)
 
             rgbs = rgbs * masks
             pred_depths = depth_ae(rgbs)
