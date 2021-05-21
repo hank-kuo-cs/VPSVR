@@ -207,7 +207,7 @@ def train(args):
         n = 0
         avg_losses = {'depth': 0.0, 'vp_cd': 0.0, 'vp_div': 0.0, 'part_vp_cd': 0.0,
                       'mesh_cd': 0.0, 'part_mesh_cd': 0.0,
-                      'lap': 0.0, 'normal': 0.0, 'sobel': 0.0, 'center': 0.0, 'deform': []}
+                      'lap': 0.0, 'normal': 0.0, 'sobel': 0.0, 'center': 0.0, 'deform': 0.0}
 
         progress_bar = tqdm(dataloader)
 
