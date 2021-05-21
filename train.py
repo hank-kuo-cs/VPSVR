@@ -7,6 +7,7 @@ from tqdm import tqdm
 from torch.nn import MSELoss
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import StepLR
 from kaolin.rep import TriangleMesh
 
 
@@ -34,7 +35,7 @@ def parse_arguments():
     parser.add_argument('--lr_depth_en', type=float, default=1e-4, help='learning rate of depth encoder')
     parser.add_argument('--lr_translate_de', type=float, default=1e-4, help='learning rate of translate decoder')
     parser.add_argument('--lr_volume_rotate_de', type=float, default=1e-4, help='learning rate of volume rotate decoder')
-    parser.add_argument('--lr_deform_de', type=float, default=1e-5, help='learning rate of deformation decoder')
+    parser.add_argument('--lr_deform_de', type=float, default=1e-4, help='learning rate of deformation decoder')
     parser.add_argument('--beta1', type=float, default=0.5, help='beta1 of Adam optimizer')
     parser.add_argument('--beta2', type=float, default=0.9, help='beta2 of Adam optimizer')
     parser.add_argument('--w_decay', type=float, default=0.0, help='weight decay of Adam optimizer')
@@ -184,6 +185,7 @@ def train(args):
         {'params': volume_rotate_de.parameters(), 'lr': args.lr_volume_rotate_de},
         {'params': deform_gcn.parameters(), 'lr': args.lr_deform_de}
     ], betas=(args.beta1, args.beta2), weight_decay=args.w_decay)
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
 
     mse_loss_func = MSELoss()
     cd_loss_func = ChamferDistanceLoss()
@@ -359,6 +361,7 @@ def train(args):
                 torch.save(model_weight, model_path)
 
         depth_tf *= args.dtf_decay
+        scheduler.step()
 
     for key in list(epoch_train_losses.keys()):
         np.save(os.path.join(record_paths['loss'], key + '.npy'), np.array(epoch_train_losses[key]))
