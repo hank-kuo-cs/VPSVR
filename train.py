@@ -23,11 +23,11 @@ def parse_arguments():
     parser.add_argument('--epochs', type=int, default=30, help='training epoch num')
 
     # Dataset Setting
-    parser.add_argument('--dataset', type=str, default='genre', help='choose "genre" or "3dr2n2", "cvx_rearrange"')
-    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of dataset')
+    parser.add_argument('--dataset', type=str, default='cvx_rearrange', help='choose "genre" or "3dr2n2", "cvx_rearrange"')
+    parser.add_argument('--root', type=str, default='/eva_data/hdd1/hank/CvxRearrangement', help='root directory of dataset')
     parser.add_argument('--genre_root', type=str, default='/eva_data/hdd1/hank/GenRe', help='root directory of genre')
-    parser.add_argument('--cvx_add_genre', action='store_true', default=False, help='cvx rearrangement dataset concat with genre')
-    parser.add_argument('--size', type=int, default=6000, help='the size will divide equally on all classes')
+    parser.add_argument('--cvx_add_genre', action='store_true', default=True, help='cvx rearrangement dataset concat with genre')
+    parser.add_argument('--size', type=int, default=120000, help='the size will divide equally on all classes')
     parser.add_argument('--genre_size', type=int, default=60000, help='concated genre dataset size')
 
     # Optimizer
@@ -42,7 +42,7 @@ def parse_arguments():
 
     # Loss weight
     parser.add_argument('--l_depth', type=float, default=1.0, help='lambda of depth mse loss')
-    parser.add_argument('--l_vpdiv', type=float, default=10.0, help='lambda of vp diverse loss')
+    parser.add_argument('--l_vpdiv', type=float, default=1.0, help='lambda of vp diverse loss')
     parser.add_argument('--l_vp_cd', type=float, default=1.0, help='lambda of global vp reconstruct cd loss')
     parser.add_argument('--l_part_vp_cd', type=float, default=0.0, help='lambda of part vp reconstruct cd loss')
     parser.add_argument('--l_mesh_cd', type=float, default=1.0, help='lambda of deformed mesh reconstruct cd loss')
@@ -67,7 +67,7 @@ def parse_arguments():
     # Record Setting
     parser.add_argument('--output_path', type=str, default='./output/train')
     parser.add_argument('--checkpoint_path', type=str, default='./checkpoint')
-    parser.add_argument('--record_batch_interval', type=int, default=20, help='record prediction result every N batch')
+    parser.add_argument('--record_batch_interval', type=int, default=200, help='record prediction result every N batch')
     parser.add_argument('--checkpoint_epoch_interval', type=int, default=5, help='record model checkpoint every N epoch')
 
     return parser.parse_args()
