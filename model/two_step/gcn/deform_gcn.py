@@ -21,7 +21,7 @@ class DeformGCN(nn.Module):
 
         batch_vertices = self.get_batch_vertices(meshes)  # (B, N, 3)
 
-        if not self.edges:
+        if self.edges is None:
             self.edges = self.get_edges(meshes[0])
 
         global_features = self.global_split_fc(global_features).view(B, self.v_num, 128)
