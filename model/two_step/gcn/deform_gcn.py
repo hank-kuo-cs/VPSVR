@@ -9,6 +9,7 @@ class DeformGCN(nn.Module):
     def __init__(self, n_dim=3, feature_dim=960 + 128, v_num=2048):
         super().__init__()
         self.v_num = v_num
+        self.edges = None
         self.gcn = nn.ModuleList([
             GBottleneck(in_dim=n_dim + feature_dim, hidden_dim=256, out_dim=64),
             GCNConv(64, 3)
@@ -19,7 +20,9 @@ class DeformGCN(nn.Module):
         B = len(meshes)
 
         batch_vertices = self.get_batch_vertices(meshes)  # (B, N, 3)
-        edges = self.get_edges(meshes[0])
+
+        if not self.edges:
+            self.edges = self.get_edges(meshes[0])
 
         global_features = self.global_split_fc(global_features).view(B, self.v_num, 128)
         local_features = get_local_features(batch_vertices, imgs, perceptual_features)
@@ -27,7 +30,7 @@ class DeformGCN(nn.Module):
         x = torch.cat([batch_vertices, global_features, local_features], 2)  # (B, N, 3+128+960)
 
         for conv in self.gcn:
-            x = conv(x, edges)
+            x = conv(x, self.edges)
 
         return x  # (B, N, 3)
 
