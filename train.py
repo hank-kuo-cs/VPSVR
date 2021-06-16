@@ -42,7 +42,7 @@ def parse_arguments():
 
     # Loss weight
     parser.add_argument('--l_depth', type=float, default=1.0, help='lambda of depth mse loss')
-    parser.add_argument('--l_vpdiv', type=float, default=1.0, help='lambda of vp diverse loss')
+    parser.add_argument('--l_vpdiv', type=float, default=0.1, help='lambda of vp diverse loss')
     parser.add_argument('--l_vp_cd', type=float, default=1.0, help='lambda of global vp reconstruct cd loss')
     parser.add_argument('--l_part_vp_cd', type=float, default=0.0, help='lambda of part vp reconstruct cd loss')
     parser.add_argument('--l_mesh_cd', type=float, default=1.0, help='lambda of deformed mesh reconstruct cd loss')
@@ -50,8 +50,8 @@ def parse_arguments():
     parser.add_argument('--l_lap', type=float, default=0.1, help='lambda of laplacian regularization')
     parser.add_argument('--l_normal', type=float, default=0.0, help='lambda of normal loss')
     parser.add_argument('--l_sobel', type=float, default=0.0, help='lambda of sobel regularization loss')
-    parser.add_argument('--l_vp_center', type=float, default=0.01, help='lambda of vp center loss')
-    parser.add_argument('--l_deform', type=float, default=0.001, help='lambda of deformation regularization loss')
+    parser.add_argument('--l_vp_center', type=float, default=0.0, help='lambda of vp center loss')
+    parser.add_argument('--l_deform', type=float, default=0.0, help='lambda of deformation regularization loss')
     parser.add_argument('--vpdiv_w1', type=float, default=0.01, help='w1 of cd loss of vp diverse loss')
     parser.add_argument('--gt_sample_num', type=int, default=4096, help='number of gt sample points')
 
@@ -285,9 +285,9 @@ def train(args):
             center_loss = vp_center_loss_func(vp_num, pred_meshes, args.vertex_num, vp_centers) * args.l_vp_center \
                 if args.l_vp_center > 0 else torch.tensor(0.0).cuda()
 
-            pred_vertices = torch.cat([m.vertices[None] for m in pred_meshes])
+            pred_fine_points = torch.cat([m.sample(2048)[0][None] for m in pred_meshes])
 
-            mesh_cd_loss, _, _ = cd_loss_func(pred_vertices, gt_points)
+            mesh_cd_loss, _, _ = cd_loss_func(pred_fine_points, gt_points)
             mesh_cd_loss *= args.l_mesh_cd
 
             part_mesh_cd_loss = torch.tensor(0.0).cuda()
