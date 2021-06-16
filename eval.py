@@ -177,7 +177,7 @@ def eval(args):
         vp_meshes = [TriangleMesh.from_tensors(m.vertices.clone(), m.faces.clone()) for m in pred_meshes]
         pred_coarse_points = Sampling.sample_mesh_points(vp_meshes, sample_num=1024)
 
-        vp_cd_loss = cd_loss_func(pred_coarse_points, gt_points, each_batch=True)[0]
+        vp_cd_loss = cd_loss_func(pred_coarse_points, gt_points, each_batch=True)[0] * 1.5  # GenRe dist
 
         deformation = deform_gcn(pred_meshes, input_depths, perceptual_feature_list, global_features)
 
@@ -186,7 +186,7 @@ def eval(args):
 
         pred_fine_points = Sampling.sample_mesh_points(pred_meshes, sample_num=1024)
 
-        mesh_cd_loss = cd_loss_func(pred_fine_points, gt_points, each_batch=True)[0]
+        mesh_cd_loss = cd_loss_func(pred_fine_points, gt_points, each_batch=True)[0] * 1.5  # GenRe dist
 
         batch_size = rgbs.size(0)
         for b in range(batch_size):
