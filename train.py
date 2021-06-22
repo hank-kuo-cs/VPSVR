@@ -285,9 +285,9 @@ def train(args):
             center_loss = vp_center_loss_func(vp_num, pred_meshes, args.vertex_num, vp_centers) * args.l_vp_center \
                 if args.l_vp_center > 0 else torch.tensor(0.0).cuda()
 
-            pred_fine_points = torch.cat([m.sample(2048)[0][None] for m in pred_meshes])
+            pred_vertices = torch.cat([m.vertices(2048)[None] for m in pred_meshes])
 
-            mesh_cd_loss, _, _ = cd_loss_func(pred_fine_points, gt_points)
+            mesh_cd_loss, _, _ = cd_loss_func(pred_vertices, gt_points)
             mesh_cd_loss *= args.l_mesh_cd
 
             part_mesh_cd_loss = torch.tensor(0.0).cuda()

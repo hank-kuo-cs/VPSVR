@@ -48,7 +48,7 @@ class R2N2Dataset(Dataset):
             class_id, obj_id = self.p2m_data[i][0], self.p2m_data[i][1]
             if class_id not in class_obj_nums:
                 class_obj_nums[class_id] = 0
-            if class_obj_nums[class_id] == obj_num_each_class:
+            if class_obj_nums[class_id] == obj_num_each_class and obj_num_each_class > 0:
                 continue
 
             imgs_dir_path = os.path.join(self.args.root, class_id, obj_id, 'rendering')
